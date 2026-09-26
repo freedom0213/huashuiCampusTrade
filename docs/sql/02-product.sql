@@ -37,30 +37,34 @@ CREATE TABLE IF NOT EXISTS t_category
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS t_product
 (
-    id             BIGINT         NOT NULL COMMENT '主键（雪花 ID）',
-    seller_id      BIGINT         NOT NULL COMMENT '卖家用户 id',
-    category_id    BIGINT         NOT NULL COMMENT '分类 id',
-    title          VARCHAR(64)    NOT NULL COMMENT '商品标题',
-    description    VARCHAR(1000)  NOT NULL DEFAULT '' COMMENT '商品描述',
-    condition_level TINYINT       NOT NULL DEFAULT 1 COMMENT '成色：0 全新，1 九成新，2 七成新，3 五成新及以下',
-    price          DECIMAL(10, 2) NOT NULL COMMENT '售价',
-    original_price DECIMAL(10, 2)          DEFAULT NULL COMMENT '原价，可为空（用于展示划线价）',
-    cover_url      VARCHAR(255)   NOT NULL DEFAULT '' COMMENT '封面图地址',
-    trade_place    VARCHAR(128)   NOT NULL COMMENT '交易地点，如「3 号楼宿舍楼下」。本项目只支持校内当面自提，不做配送',
-    view_count     INT            NOT NULL DEFAULT 0 COMMENT '浏览量。由 Redis 累加、XXL-JOB 定时结算回写，避免行锁热点',
-    favorite_count INT            NOT NULL DEFAULT 0 COMMENT '收藏数',
-    status         TINYINT        NOT NULL DEFAULT 0 COMMENT '状态：0 待审核，1 在售，2 已锁定，3 已售出，4 已下架，5 已驳回',
-    reject_reason  VARCHAR(255)   NOT NULL DEFAULT '' COMMENT '审核驳回原因',
-    publish_time   DATETIME                DEFAULT NULL COMMENT '上架时间（审核通过时写入）',
-    sold_time      DATETIME                DEFAULT NULL COMMENT '售出时间',
-    create_time    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    update_time    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    deleted        TINYINT        NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+    id              BIGINT         NOT NULL COMMENT '主键（雪花 ID）',
+    seller_id       BIGINT         NOT NULL COMMENT '卖家用户 id',
+    category_id     BIGINT         NOT NULL COMMENT '分类 id',
+    campus          VARCHAR(16)    NOT NULL COMMENT '校区：龙子湖 / 花园 / 江淮。江淮校区在信阳，与郑州两校区不通勤，故单列存储以便筛选',
+    title           VARCHAR(64)    NOT NULL COMMENT '商品标题',
+    description     VARCHAR(1000)  NOT NULL DEFAULT '' COMMENT '商品描述',
+    condition_level TINYINT        NOT NULL DEFAULT 1 COMMENT '成色：0 全新，1 九成新，2 七成新，3 五成新及以下',
+    price           DECIMAL(10, 2) NOT NULL COMMENT '售价',
+    original_price  DECIMAL(10, 2)          DEFAULT NULL COMMENT '原价，可为空（用于展示划线价）',
+    cover_url       VARCHAR(255)   NOT NULL DEFAULT '' COMMENT '封面图地址',
+    trade_place     VARCHAR(128)   NOT NULL COMMENT '交易地点，如「龙子湖 · 第二食堂」。本项目只支持校内当面自提，不做配送',
+    view_count      INT            NOT NULL DEFAULT 0 COMMENT '浏览量。由 Redis 累加、XXL-JOB 定时结算回写，避免行锁热点',
+    favorite_count  INT            NOT NULL DEFAULT 0 COMMENT '收藏数',
+    status          TINYINT        NOT NULL DEFAULT 0 COMMENT '状态：0 待审核，1 在售，2 已锁定，3 已售出，4 已下架，5 已驳回',
+    reject_reason   VARCHAR(255)   NOT NULL DEFAULT '' COMMENT '审核驳回原因',
+    publish_time    DATETIME                DEFAULT NULL COMMENT '上架时间（审核通过时写入）',
+    sold_time       DATETIME                DEFAULT NULL COMMENT '售出时间',
+    create_time     DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time     DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted         TINYINT        NOT NULL DEFAULT 0 COMMENT '逻辑删除',
     PRIMARY KEY (id),
     -- 「我发布的商品」列表 + 「我的发布」按状态筛选
     KEY idx_seller_id_status (seller_id, status),
     -- 首页按分类浏览：分类 + 状态
     KEY idx_category_id_status (category_id, status),
+    -- 按校区筛选在售商品：校区 + 状态 + 上架时间
+    -- 三列组合同时覆盖「筛选」与「按时间倒序」，避免回表后再 filesort
+    KEY idx_campus_status_time (campus, status, publish_time),
     -- 首页默认排序：在售商品按上架时间倒序，该组合索引可直接支撑排序
     KEY idx_status_publish_time (status, publish_time),
     -- 关键词搜索。注意：LIKE '%关键词%' 用不到该索引，这里只是为「前缀匹配」和将来接 ES 留位置
