@@ -55,6 +55,16 @@ spring:
           filters:
             - StripPrefix=1
 
+        # 收藏。它归属商品域（本质是「用户与商品之间的关系」，不跨服务就能查），
+        # 但对外作为独立资源暴露：挂在 /api/product/** 下会让「我的收藏」
+        # 看起来像商品的子资源，语义不干净。三个收藏接口都需登录，不在白名单内
+        - id: favorite-service
+          uri: lb://huashui-product-service
+          predicates:
+            - Path=/api/favorite/**
+          filters:
+            - StripPrefix=1
+
         - id: order-service
           uri: lb://huashui-order-service
           predicates:

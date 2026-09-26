@@ -1,20 +1,24 @@
 package cn.freedom.huashui.product.service.impl;
 
 import cn.freedom.huashui.common.api.product.ProductLockDTO;
+import cn.freedom.huashui.common.constant.RedisKeys;
 import cn.freedom.huashui.common.context.UserContext;
 import cn.freedom.huashui.common.enums.Campus;
-import cn.freedom.huashui.common.enums.ProductCondition;
 import cn.freedom.huashui.common.enums.ProductStatus;
 import cn.freedom.huashui.common.exception.BizException;
 import cn.freedom.huashui.common.result.PageResult;
 import cn.freedom.huashui.common.result.ResultCode;
+import cn.freedom.huashui.product.cache.CacheService;
 import cn.freedom.huashui.product.config.ProductProperties;
+import cn.freedom.huashui.product.convert.ProductConverter;
 import cn.freedom.huashui.product.dto.ProductQueryDTO;
 import cn.freedom.huashui.product.dto.ProductSaveDTO;
 import cn.freedom.huashui.product.entity.Category;
+import cn.freedom.huashui.product.entity.Favorite;
 import cn.freedom.huashui.product.entity.Product;
 import cn.freedom.huashui.product.entity.ProductImage;
 import cn.freedom.huashui.product.mapper.CategoryMapper;
+import cn.freedom.huashui.product.mapper.FavoriteMapper;
 import cn.freedom.huashui.product.mapper.ProductImageMapper;
 import cn.freedom.huashui.product.mapper.ProductMapper;
 import cn.freedom.huashui.product.service.ProductService;
@@ -30,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -48,10 +53,18 @@ public class ProductServiceImpl implements ProductService {
     private static final String SORT_PRICE_DESC = "price_desc";
     private static final String SORT_VIEWS = "views";
 
+    /**
+     * 商品详情缓存的基础 TTL。实际写入时还会加最多 1/3 的随机抖动（见 {@link CacheService}），
+     * 避免一大批商品在同一时刻集中过期、请求同时回源（缓存雪崩）。
+     */
+    private static final Duration DETAIL_TTL = Duration.ofMinutes(30);
+
     private final ProductMapper productMapper;
     private final ProductImageMapper productImageMapper;
     private final CategoryMapper categoryMapper;
+    private final FavoriteMapper favoriteMapper;
     private final ProductProperties productProperties;
+    private final CacheService cacheService;
 
     // ==================== 写操作 ====================
 
@@ -116,6 +129,7 @@ public class ProductServiceImpl implements ProductService {
                 .eq(ProductImage::getProductId, productId));
         saveImages(productId, dto.getImageUrls());
 
+        evictDetailCache(productId);
         log.info("商品编辑成功 | productId={} | sellerId={}", productId, userId);
     }
 
@@ -138,6 +152,7 @@ public class ProductServiceImpl implements ProductService {
         if (affected == 0) {
             throw new BizException(ResultCode.PRODUCT_STATUS_ILLEGAL, "只有「在售」的商品才能下架");
         }
+        evictDetailCache(productId);
         log.info("商品下架 | productId={}", productId);
     }
 
@@ -166,6 +181,7 @@ public class ProductServiceImpl implements ProductService {
         if (affected == 0) {
             throw new BizException(ResultCode.PRODUCT_STATUS_ILLEGAL, "只有「已下架」的商品才能重新上架");
         }
+        evictDetailCache(productId);
         log.info("商品重新上架 | productId={} | targetStatus={}", productId, targetStatus);
     }
 
@@ -182,6 +198,7 @@ public class ProductServiceImpl implements ProductService {
 
         // @TableLogic 会把这条 delete 改写成 UPDATE ... SET deleted = 1
         productMapper.deleteById(productId);
+        evictDetailCache(productId);
         log.info("商品已逻辑删除 | productId={} | sellerId={}", productId, userId);
     }
 
@@ -216,20 +233,56 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public ProductDetailVO detail(Long productId) {
-        Product product = productMapper.selectById(productId);
-        if (product == null) {
+        if (productId == null) {
+            throw new BizException(ResultCode.PRODUCT_NOT_FOUND);
+        }
+        Long currentUserId = UserContext.getUserId();
+
+        // 缓存里存的只是「商品本身」的数据，与「谁在看」无关。
+        // 下面三步（权限判断、owned、favorited）都依赖当前登录用户，
+        // 因此必须在缓存之外重算 —— 否则会把 A 用户看到的结果原样发给 B 用户。
+        ProductDetailVO vo = cacheService.getOrLoad(
+                RedisKeys.productDetail(productId),
+                ProductDetailVO.class,
+                DETAIL_TTL,
+                () -> loadDetailFromDb(productId));
+
+        // 回源返回 null 表示商品确实不存在（CacheService 已把它缓存成空值以防穿透）。
+        // 这里必须补上业务语义 —— 少了这一步，下面取 sellerId 会抛 NPE，
+        // 最终被兜底成「500 系统繁忙」，把「商品不存在」说成了「系统故障」
+        if (vo == null) {
             throw new BizException(ResultCode.PRODUCT_NOT_FOUND);
         }
 
-        Long currentUserId = UserContext.getUserId();
-        boolean owned = currentUserId != null && currentUserId.equals(product.getSellerId());
+        boolean owned = currentUserId != null && currentUserId.equals(vo.getSellerId());
 
         // 待审核 / 已驳回属于卖家的「私事」，对他人直接按不存在处理——
         // 返回「无权查看」等于告诉对方「这个 id 是存在的」，没必要泄露这个信息
-        Integer status = product.getStatus();
+        Integer status = vo.getStatus();
         if ((Objects.equals(ProductStatus.PENDING_AUDIT.getCode(), status)
                 || Objects.equals(ProductStatus.REJECTED.getCode(), status)) && !owned) {
             throw new BizException(ResultCode.PRODUCT_NOT_FOUND);
+        }
+
+        vo.setOwned(owned);
+        vo.setFavorited(isFavorited(currentUserId, productId, owned));
+        vo.setViewCount(currentViewCount(vo.getViewCount(), productId));
+        return vo;
+    }
+
+    /**
+     * 从数据库组装详情。
+     *
+     * <p><b>只组装与登录用户无关的字段</b>：{@code owned} 与 {@code favorited} 先置为 false，
+     * 由 {@link #detail} 在缓存之外按当前用户重算。
+     *
+     * <p>返回 {@code null} 表示商品不存在，{@link CacheService} 会把它缓存成空值，
+     * 后续请求在 60 秒内不再打数据库 —— 这就是防缓存穿透。
+     */
+    private ProductDetailVO loadDetailFromDb(Long productId) {
+        Product product = productMapper.selectById(productId);
+        if (product == null) {
+            return null;
         }
 
         ProductDetailVO vo = new ProductDetailVO();
@@ -244,19 +297,77 @@ public class ProductServiceImpl implements ProductService {
         vo.setCampus(product.getCampus());
         vo.setTradePlace(product.getTradePlace());
         vo.setConditionLevel(product.getConditionLevel());
-        vo.setConditionDesc(descOfCondition(product.getConditionLevel()));
+        vo.setConditionDesc(ProductConverter.descOfCondition(product.getConditionLevel()));
         vo.setStatus(product.getStatus());
-        vo.setStatusDesc(descOfStatus(product.getStatus()));
+        vo.setStatusDesc(ProductConverter.descOfStatus(product.getStatus()));
         vo.setRejectReason(product.getRejectReason());
         vo.setViewCount(product.getViewCount());
         vo.setFavoriteCount(product.getFavoriteCount());
         vo.setPublishTime(product.getPublishTime());
         vo.setSoldTime(product.getSoldTime());
         vo.setSellerId(product.getSellerId());
-        vo.setOwned(owned);
         vo.setCreateTime(product.getCreateTime());
         vo.setImageUrls(loadImageUrls(productId));
+        // 下面两个字段依赖登录用户，这里只占位，真正的值在 detail() 里算
+        vo.setOwned(false);
+        vo.setFavorited(false);
         return vo;
+    }
+
+    /**
+     * 当前用户是否已收藏该商品。
+     *
+     * <p>未登录直接返回 false；<b>自己的商品也返回 false</b> ——
+     * 自己可以浏览、可以进详情页，但不允许收藏，按钮应当是不可用状态而不是已收藏状态。
+     */
+    private boolean isFavorited(Long userId, Long productId, boolean owned) {
+        if (userId == null || owned) {
+            return false;
+        }
+        return favoriteMapper.selectCount(new LambdaQueryWrapper<Favorite>()
+                .eq(Favorite::getUserId, userId)
+                .eq(Favorite::getProductId, productId)) > 0;
+    }
+
+    /**
+     * 浏览量：Redis 累加 + 与数据库值合并成展示值。
+     *
+     * <p><b>为什么不直接 {@code UPDATE view_count = view_count + 1}：</b>
+     * 那会让每次浏览都对同一行加排他锁，热门商品上形成行锁热点、请求排队。
+     * 改为在 Redis 自增后，由定时任务（阶段 10）用 {@code DECRBY} 取差值批量写回，
+     * 数据库压力从「每次浏览一次写」降到「每 5 分钟一次写」。
+     *
+     * <p>代价是每次刷新都会 +1（未做防刷）。真实 PV 统计本来也是按请求计数，
+     * 而防刷需要引入用户/设备维度去重，超出本项目范围。
+     *
+     * <p>Redis 不可用时降级为只返回数据库里的值 —— 「看商品」这件事不该因为计数失败而失败。
+     */
+    private Integer currentViewCount(Integer dbValue, Long productId) {
+        int base = dbValue == null ? 0 : dbValue;
+        try {
+            long increment = cacheService.increment(RedisKeys.productView(productId));
+            // 同时记进「有待结算」集合：阶段 10 的结算任务据此扫描，
+            // 避免为了找出哪些商品有增量而全表扫描
+            cacheService.addToSet(RedisKeys.PRODUCT_DIRTY_VIEWS, String.valueOf(productId));
+            return base + (int) Math.min(increment, Integer.MAX_VALUE);
+        } catch (Exception e) {
+            log.warn("浏览量计数失败，降级返回数据库值 | productId={}", productId, e);
+            return base;
+        }
+    }
+
+    /**
+     * 商品数据变化后清掉它的详情缓存。
+     *
+     * <p>策略是 Cache-Aside 的「<b>先更新数据库，再删缓存</b>」：删比更新可靠 ——
+     * 并发更新时写缓存会把旧值写进去，而删缓存最坏只是多一次回源。
+     *
+     * <p>且必须等<b>事务提交之后</b>再删（见 {@code CacheService#deleteAfterCommit}）：
+     * 提交前删的话，其他线程可能在新数据落库前读到旧值并写回缓存，
+     * 此后缓存与数据库会长期不一致。
+     */
+    private void evictDetailCache(Long productId) {
+        cacheService.deleteAfterCommit(List.of(RedisKeys.productDetail(productId)));
     }
 
     // ==================== 内部接口（仅供 order-service 调用） ====================
@@ -302,6 +413,7 @@ public class ProductServiceImpl implements ProductService {
 
         log.info("商品锁定成功 | productId={} | buyerId={} | sellerId={}",
                 productId, buyerId, product.getSellerId());
+        evictDetailCache(productId);
         return dto;
     }
 
@@ -321,6 +433,7 @@ public class ProductServiceImpl implements ProductService {
             log.warn("解锁商品未生效，商品当前不是「已锁定」状态（重复解锁或状态已变更）| productId={}", productId);
             return;
         }
+        evictDetailCache(productId);
         log.info("商品已恢复在售 | productId={}", productId);
     }
 
@@ -347,6 +460,7 @@ public class ProductServiceImpl implements ProductService {
             throw new BizException(ResultCode.PRODUCT_STATUS_ILLEGAL,
                     "商品不处于「已锁定」状态，无法标记为已售出");
         }
+        evictDetailCache(productId);
         log.info("商品已售出 | productId={}", productId);
     }
 
@@ -454,36 +568,10 @@ public class ProductServiceImpl implements ProductService {
         Page<Product> page = new Page<>(query.getPage(), query.getSize());
         IPage<Product> result = productMapper.selectPage(page, wrapper);
 
-        List<ProductListVO> records = result.getRecords().stream().map(this::toListVO).toList();
+        List<ProductListVO> records = result.getRecords().stream()
+                .map(ProductConverter::toListVO)
+                .toList();
         return PageResult.of(result.getTotal(), result.getCurrent(), result.getSize(), records);
     }
 
-    private ProductListVO toListVO(Product product) {
-        ProductListVO vo = new ProductListVO();
-        vo.setId(product.getId());
-        vo.setTitle(product.getTitle());
-        vo.setPrice(product.getPrice());
-        vo.setOriginalPrice(product.getOriginalPrice());
-        vo.setCoverUrl(product.getCoverUrl());
-        vo.setTradePlace(product.getTradePlace());
-        vo.setCampus(product.getCampus());
-        vo.setConditionLevel(product.getConditionLevel());
-        vo.setConditionDesc(descOfCondition(product.getConditionLevel()));
-        vo.setStatus(product.getStatus());
-        vo.setStatusDesc(descOfStatus(product.getStatus()));
-        vo.setViewCount(product.getViewCount());
-        vo.setFavoriteCount(product.getFavoriteCount());
-        vo.setPublishTime(product.getPublishTime());
-        return vo;
-    }
-
-    private String descOfCondition(Integer code) {
-        ProductCondition condition = ProductCondition.of(code);
-        return condition == null ? "" : condition.getDesc();
-    }
-
-    private String descOfStatus(Integer code) {
-        ProductStatus status = ProductStatus.of(code);
-        return status == null ? "" : status.getDesc();
-    }
 }

@@ -37,8 +37,10 @@ import java.nio.charset.StandardCharsets;
  * <p>执行流程：
  * <ol>
  *   <li>OPTIONS 预检请求直接放行（浏览器发预检时不带 token，拦了会导致跨域全挂）</li>
- *   <li>命中白名单则放行</li>
- *   <li>取 token → 校验签名与有效期 → 失败返回 401</li>
+ *   <li>命中白名单：<b>不做强制校验，但仍尝试解析 token</b> ——
+ *       带了合法 token 就把身份透传下去，没有就当游客。这样「游客可看、
+ *       登录后内容略不同」的接口（如商品详情里的 owned / favorited）才能算对</li>
+ *   <li>非白名单：取 token → 校验签名与有效期 → 失败返回 401</li>
  *   <li>校验通过后把 userId / role 写入请求头，向下游透传</li>
  * </ol>
  *
@@ -69,13 +71,20 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        // 2. 白名单
+        String token = resolveToken(request);
+
+        // 2. 白名单：不做强制校验，但**仍然尝试解析 token**。
+        //    原因：像「商品详情」这种「游客可看、登录后内容略有不同」的接口，
+        //    下游需要知道当前是不是登录用户（是否已收藏、是不是自己发布的商品）。
+        //    如果白名单直接放行，下游收到的 X-User-Id 永远是空的，
+        //    详情里的 owned / favorited 就会永远是 false —— 不报错，只是算错。
+        //    这里的失败是**静默忽略**：白名单接口本就不要求登录，
+        //    token 过期或伪造都不该让游客访问失败。
         if (isWhiteList(path)) {
-            return chain.filter(exchange);
+            return chain.filter(transmitIdentityIfPresent(exchange, token));
         }
 
-        // 3. 取 token
-        String token = resolveToken(request);
+        // 3. 非白名单：必须携带有效 token
         if (token == null) {
             log.debug("请求未携带 token | path={}", path);
             return unauthorized(exchange);
@@ -90,14 +99,32 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
         }
 
         // 5. 透传身份
+        return chain.filter(transmitIdentity(exchange, claims));
+    }
+
+    /** 把 token 里的身份写进请求头，供下游服务通过 UserContext 读取 */
+    private ServerWebExchange transmitIdentity(ServerWebExchange exchange, Claims claims) {
         Long userId = Long.valueOf(claims.getSubject());
         Integer role = claims.get(JwtUtil.CLAIM_ROLE, Integer.class);
-        ServerHttpRequest mutatedRequest = request.mutate()
+        ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
                 .header(AuthConstants.HEADER_USER_ID, String.valueOf(userId))
                 .header(AuthConstants.HEADER_USER_ROLE, role == null ? "" : String.valueOf(role))
                 .build();
+        return exchange.mutate().request(mutatedRequest).build();
+    }
 
-        return chain.filter(exchange.mutate().request(mutatedRequest).build());
+    /**
+     * 白名单专用：带了合法 token 就透传身份，否则原样放行。
+     *
+     * <p>只认「校验通过」的 token；解析失败时按游客处理，不做任何提示 ——
+     * 白名单接口的语义就是「不登录也能用」，此时报 401 反而破坏了它的契约。
+     */
+    private ServerWebExchange transmitIdentityIfPresent(ServerWebExchange exchange, String token) {
+        if (token == null) {
+            return exchange;
+        }
+        Claims claims = jwtUtil.parse(token);
+        return claims == null ? exchange : transmitIdentity(exchange, claims);
     }
 
     private boolean isWhiteList(String path) {

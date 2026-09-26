@@ -66,5 +66,15 @@ public class ProductDetailVO {
     @Schema(description = "是否为当前登录用户自己发布的商品")
     private Boolean owned;
 
+    /**
+     * 当前登录用户是否已收藏该商品。
+     *
+     * <p><b>依赖登录用户，因此不参与缓存</b>—— 缓存的只有「商品本身」的数据，
+     * 这个字段每次请求单独查一次。未登录时为 false；
+     * <b>自己的商品也为 false</b>（自己可以浏览但不能收藏，按钮应呈现为不可用）。
+     */
+    @Schema(description = "当前登录用户是否已收藏；未登录或为自己的商品时为 false")
+    private Boolean favorited;
+
     private LocalDateTime createTime;
 }

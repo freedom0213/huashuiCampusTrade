@@ -188,7 +188,7 @@ done
 - [x] 阶段 5：product-service
 - [ ] 阶段 6：前端最小闭环（前端由独立会话推进，后端直接进入阶段 7）
 - [x] 阶段 7：order-service
-- [ ] 阶段 8：Redis 缓存体系
+- [x] 阶段 8：收藏 + Redis 缓存体系
 - [ ] 阶段 9：RabbitMQ 消息可靠性
 - [ ] 阶段 10：XXL-JOB
 - [ ] 阶段 11：Sentinel

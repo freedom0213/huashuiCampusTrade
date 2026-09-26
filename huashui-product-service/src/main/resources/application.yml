@@ -21,6 +21,19 @@ spring:
       minimum-idle: 2
       connection-timeout: 30000
 
+  # Redis：商品详情 / 分类列表缓存，以及浏览量计数
+  data:
+    redis:
+      # 宿主机端口 16379（容器内 6379），见 docker/docker-compose.yml
+      host: 127.0.0.1
+      port: 16379
+      password: ${HUASHUI_REDIS_PASSWORD:huashui@123}
+      database: 0
+      # 单次命令超时时间。缓存读失败必须快速失败，不能把接口整体拖住
+      timeout: 3000ms
+      # 不配 lettuce.pool：Lettuce 默认共享单连接并支持多路复用，
+      # 本项目的并发量下配连接池只有复杂度、没有收益
+
   servlet:
     multipart:
       # 容器层的第一道闸；业务层还会再校验一次并给出中文提示

@@ -48,6 +48,7 @@ public enum ResultCode {
     IMAGE_TYPE_NOT_ALLOWED(20010, "只支持 jpg / jpeg / png / gif / webp 格式的图片"),
     IMAGE_TOO_LARGE(20011, "图片大小超出限制"),
     IMAGE_STORE_FAILED(20012, "图片保存失败，请稍后重试"),
+    CANNOT_FAVORITE_OWN_PRODUCT(20013, "不能收藏自己发布的商品"),
 
     // ==================== 交易域 3xxxx ====================
     ORDER_NOT_FOUND(30001, "订单不存在"),
