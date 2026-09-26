@@ -57,7 +57,9 @@ public class FileController {
             throw new BizException(ResultCode.IMAGE_STORE_FAILED);
         }
 
+        // 转成 int 再返回：common 把 Long 全局序列化成字符串（为了雪花 ID 精度），
+        // 而字节数是数量、必须是数字。图片上限 5MB，远小于 int 上限，不会溢出
         return Result.success("上传成功",
-                new FileUploadVO(url, file.getOriginalFilename(), file.getSize()));
+                new FileUploadVO(url, file.getOriginalFilename(), (int) file.getSize()));
     }
 }

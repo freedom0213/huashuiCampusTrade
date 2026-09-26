@@ -110,6 +110,9 @@ huashui:
       - /api/product/detail/**
       # 分类列表对游客开放（首页胶囊行 / 搜索筛选 / 发布页下拉都要用）
       - /api/category/**
+      # 卖家主页的「历史成交笔数」，与 /api/user/detail/** 一起支撑游客浏览卖家主页
+      # 注意：/api/order 下的其余接口都不在白名单内，订单数据必须登录才能看
+      - /api/order/sold-count/**
       # 商品图片对游客开放，否则未登录用户在列表页看不到图
       # 注意：/api/file/upload 不在白名单内，上传必须登录
       - /uploads/**

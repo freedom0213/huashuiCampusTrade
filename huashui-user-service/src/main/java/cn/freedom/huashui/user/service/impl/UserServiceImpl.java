@@ -103,7 +103,7 @@ public class UserServiceImpl implements UserService {
         return LoginVO.builder()
                 .token(token)
                 .tokenType("Bearer")
-                .expiresInMinutes(jwtUtil.getTtlMinutes())
+                .expiresInMinutes((int) jwtUtil.getTtlMinutes())
                 .userId(user.getId())
                 .username(user.getUsername())
                 .nickname(user.getNickname())

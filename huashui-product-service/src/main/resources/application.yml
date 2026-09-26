@@ -27,6 +27,24 @@ spring:
       max-file-size: 5MB
       max-request-size: 10MB
 
+  rabbitmq:
+    # 宿主机端口 5673（容器内 5672），见 docker/docker-compose.yml
+    host: 127.0.0.1
+    port: 5673
+    username: huashui
+    # 开发默认值；这份凭据与仓库中的 docker-compose.yml 是同一份，本就不是秘密，
+    # 但仍留出环境变量占位符，避免生产环境沿用开发凭据
+    password: ${HUASHUI_MQ_PASSWORD:huashui@123}
+    virtual-host: /
+    listener:
+      simple:
+        # 手动 ACK：处理成功才确认。进程中途挂掉时消息仍留在队列里，不会丢
+        acknowledge-mode: manual
+        concurrency: 1
+        max-concurrency: 3
+        # 每次只预取 1 条，避免消息被一个消费者全部揽在手里、其他消费者空转
+        prefetch: 1
+
   cloud:
     nacos:
       discovery:

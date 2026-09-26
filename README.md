@@ -165,11 +165,14 @@ docker compose -f docker/docker-compose.yml ps
 应用侧的数据库密码等**不提交到仓库**，复制模板到本地文件后填写：
 
 ```bash
-cp huashui-user-service/src/main/resources/application-local.yml.example \
-   huashui-user-service/src/main/resources/application-local.yml
+# 三个连数据库的服务各需要一份（gateway 不连库，不需要）
+for m in user product order; do
+  cp huashui-${m}-service/src/main/resources/application-local.yml.example \
+     huashui-${m}-service/src/main/resources/application-local.yml
+done
 ```
 
-（该文件在阶段 4 引入 user-service 时创建，用于放置数据库密码）
+（`application-local.yml` 已在 `.gitignore` 中，不会被提交。仓库是公开的，数据库密码一旦提交就等于公开。）
 
 **4. 启动服务**
 
@@ -183,10 +186,8 @@ cp huashui-user-service/src/main/resources/application-local.yml.example \
 - [x] 阶段 3：gateway
 - [x] 阶段 4：user-service
 - [x] 阶段 5：product-service
-- [ ] 阶段 4：user-service
-- [ ] 阶段 5：product-service
-- [ ] 阶段 6：前端最小闭环
-- [ ] 阶段 7：order-service
+- [ ] 阶段 6：前端最小闭环（前端由独立会话推进，后端直接进入阶段 7）
+- [x] 阶段 7：order-service
 - [ ] 阶段 8：Redis 缓存体系
 - [ ] 阶段 9：RabbitMQ 消息可靠性
 - [ ] 阶段 10：XXL-JOB

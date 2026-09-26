@@ -1,5 +1,6 @@
 package cn.freedom.huashui.product.service;
 
+import cn.freedom.huashui.common.api.product.ProductLockDTO;
 import cn.freedom.huashui.common.result.PageResult;
 import cn.freedom.huashui.product.dto.ProductQueryDTO;
 import cn.freedom.huashui.product.dto.ProductSaveDTO;
@@ -53,4 +54,31 @@ public interface ProductService {
      * 商品详情。待审核与已驳回的商品只有卖家本人可见。
      */
     ProductDetailVO detail(Long productId);
+
+    // ==================== 内部接口（仅供 order-service 调用） ====================
+
+    /**
+     * 锁定商品：在售 → 已锁定，成功时一并返回下单所需的商品快照。
+     *
+     * <p>并发安全由条件更新（{@code WHERE status = 在售}）+ 受影响行数保证，
+     * 不需要额外加锁。两个买家同时下单时，只有一个人能改到状态。
+     *
+     * @throws cn.freedom.huashui.common.exception.BizException
+     *         商品不存在 / 购买自己发布的商品 / 商品已被别人抢先买走
+     */
+    ProductLockDTO lockForOrder(Long productId, Long buyerId);
+
+    /**
+     * 解锁商品：已锁定 → 在售。
+     *
+     * <p>用于两种情况：order 侧建单失败后的补偿调用，以及消费「订单已取消」消息。
+     * <b>本方法必须幂等且不抛异常</b>——重复调用与重复消费消息都会走到这里，
+     * 一旦抛异常，MQ 会不断重投同一条消息直到进入死信队列。
+     */
+    void unlockForOrder(Long productId);
+
+    /**
+     * 标记商品已售出：已锁定 → 已售出（终态）。由买家确认付款时调用。
+     */
+    void markSold(Long productId);
 }

@@ -1,5 +1,6 @@
 package cn.freedom.huashui.product.service.impl;
 
+import cn.freedom.huashui.common.api.product.ProductLockDTO;
 import cn.freedom.huashui.common.context.UserContext;
 import cn.freedom.huashui.common.enums.Campus;
 import cn.freedom.huashui.common.enums.ProductCondition;
@@ -256,6 +257,97 @@ public class ProductServiceImpl implements ProductService {
         vo.setCreateTime(product.getCreateTime());
         vo.setImageUrls(loadImageUrls(productId));
         return vo;
+    }
+
+    // ==================== 内部接口（仅供 order-service 调用） ====================
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ProductLockDTO lockForOrder(Long productId, Long buyerId) {
+        if (productId == null || buyerId == null) {
+            throw new BizException(ResultCode.PARAM_ERROR, "商品 id 与买家 id 不能为空");
+        }
+
+        Product product = productMapper.selectById(productId);
+        if (product == null) {
+            throw new BizException(ResultCode.PRODUCT_NOT_FOUND);
+        }
+        if (Objects.equals(product.getSellerId(), buyerId)) {
+            throw new BizException(ResultCode.CANNOT_BUY_OWN_PRODUCT);
+        }
+
+        // 状态判断只写在下面这一处条件更新里，不在上面再判断一次：
+        // 两处判断会让「以哪个为准」变得含糊，而且并发下那次判断本就无意义
+        // （判断通过之后、更新之前，状态仍可能被别人改掉）。
+        // 上面的预检查只负责给出更准确的提示（商品不存在 / 买自己的商品）。
+        int affected = productMapper.update(null, new LambdaUpdateWrapper<Product>()
+                .eq(Product::getId, productId)
+                .eq(Product::getStatus, ProductStatus.ON_SALE.getCode())
+                .set(Product::getStatus, ProductStatus.LOCKED.getCode())
+                .set(Product::getUpdateTime, LocalDateTime.now()));
+
+        if (affected == 0) {
+            // 商品曾存在但现在已不是在售：被别人抢先买走 / 卖家下架 / 已售出 / 已被逻辑删除。
+            // 统一提示「手慢了」，不暴露具体原因——否则买家能据此推断卖家的操作意图。
+            log.info("锁定商品失败，商品已不是在售状态 | productId={} | buyerId={}", productId, buyerId);
+            throw new BizException(ResultCode.PRODUCT_LOCK_FAILED);
+        }
+
+        ProductLockDTO dto = new ProductLockDTO();
+        dto.setProductId(product.getId());
+        dto.setSellerId(product.getSellerId());
+        dto.setTitle(product.getTitle());
+        dto.setCoverUrl(product.getCoverUrl());
+        dto.setPrice(product.getPrice());
+
+        log.info("商品锁定成功 | productId={} | buyerId={} | sellerId={}",
+                productId, buyerId, product.getSellerId());
+        return dto;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unlockForOrder(Long productId) {
+        int affected = productMapper.update(null, new LambdaUpdateWrapper<Product>()
+                .eq(Product::getId, productId)
+                .eq(Product::getStatus, ProductStatus.LOCKED.getCode())
+                .set(Product::getStatus, ProductStatus.ON_SALE.getCode())
+                .set(Product::getUpdateTime, LocalDateTime.now()));
+
+        if (affected == 0) {
+            // 幂等分支：重复解锁、MQ 重复消费、商品已售出或已删除都会走到这里。
+            // 只记 warn 不抛异常——抛了会让 MQ 反复重投同一条消息，
+            // 最终把一条「其实已经生效」的消息送进死信队列。
+            log.warn("解锁商品未生效，商品当前不是「已锁定」状态（重复解锁或状态已变更）| productId={}", productId);
+            return;
+        }
+        log.info("商品已恢复在售 | productId={}", productId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void markSold(Long productId) {
+        LocalDateTime now = LocalDateTime.now();
+        int affected = productMapper.update(null, new LambdaUpdateWrapper<Product>()
+                .eq(Product::getId, productId)
+                .eq(Product::getStatus, ProductStatus.LOCKED.getCode())
+                .set(Product::getStatus, ProductStatus.SOLD.getCode())
+                .set(Product::getSoldTime, now)
+                .set(Product::getUpdateTime, now));
+
+        if (affected == 0) {
+            // 幂等分支：重复标记（商品已是「已售出」）直接放过
+            Product product = productMapper.selectById(productId);
+            if (product != null && Objects.equals(ProductStatus.SOLD.getCode(), product.getStatus())) {
+                log.warn("商品已是「已售出」，重复标记被忽略 | productId={}", productId);
+                return;
+            }
+            // 其余情况说明订单与商品的状态已经不一致（例如商品被别人买走），
+            // 属于数据异常，必须立刻暴露而不是静默放过
+            throw new BizException(ResultCode.PRODUCT_STATUS_ILLEGAL,
+                    "商品不处于「已锁定」状态，无法标记为已售出");
+        }
+        log.info("商品已售出 | productId={}", productId);
     }
 
     // ==================== 私有方法 ====================

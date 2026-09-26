@@ -66,4 +66,26 @@ public enum ResultCode {
         this.code = code;
         this.message = message;
     }
+
+    /**
+     * 按状态码反查枚举。
+     *
+     * <p>用途是「翻译下游服务的错误码」：调用方拿到 Feign 返回的 {@code Result} 后，
+     * 需要把里面的业务码还原成枚举，才能原样抛出本服务的业务异常。
+     * 没有这个方法，调用方就只能把错误码硬编码成数字或字符串，一改就漏。
+     *
+     * @param code 业务状态码
+     * @return 找不到时返回 {@code null}，由调用方决定兜底策略
+     */
+    public static ResultCode of(Integer code) {
+        if (code == null) {
+            return null;
+        }
+        for (ResultCode value : values()) {
+            if (value.code == code) {
+                return value;
+            }
+        }
+        return null;
+    }
 }

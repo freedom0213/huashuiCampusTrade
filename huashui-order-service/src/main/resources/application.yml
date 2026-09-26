@@ -1,0 +1,92 @@
+# ============================================================
+# 交易服务配置
+# 端口 6004（通过网关 6001 对外）
+# ============================================================
+server:
+  port: 6004
+
+spring:
+  application:
+    name: huashui-order-service
+
+  # 本地敏感配置（数据库账号密码）不提交到仓库。
+  # 模板见同目录 application-local.yml.example。
+  config:
+    import: optional:classpath:application-local.yml
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/huashui_order?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  rabbitmq:
+    # 宿主机端口 5673（容器内 5672），见 docker/docker-compose.yml
+    host: 127.0.0.1
+    port: 5673
+    username: huashui
+    password: ${HUASHUI_MQ_PASSWORD:huashui@123}
+    virtual-host: /
+    # 本服务只是生产方，不消费消息，因此不需要配置 listener
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:18848
+        namespace: public
+
+    openfeign:
+      client:
+        config:
+          default:
+            # 默认读超时是 60 秒，太长了：商品服务一旦卡住，
+            # 下单请求的线程会被白白挂住 60 秒，并发上来线程池直接耗尽。
+            # 宁可快速失败（用户重试一次），也不要慢速失败（拖垮整个服务）
+            connect-timeout: 2000
+            read-timeout: 3000
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: assign_id
+      # 注意：t_orders 没有 deleted 列 —— 订单是交易凭证，不允许删除。
+      # 以下逻辑删除配置只对「实体中真实存在同名字段」生效，
+      # Order 实体没有 deleted 字段，因此不会给它凭空加上条件
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# 本服务不配 huashui.jwt：JWT 的签发与校验都在网关完成，
+# 下游服务只从请求头读 X-User-Id / X-User-Role，不需要密钥。
+# 不配的话 common 的 JwtAutoConfiguration 条件不成立，JwtUtil Bean 不会被创建，
+# 也不会因为「密钥没配」而启动失败。
+
+huashui:
+  order:
+    # 待支付超时分钟数。演示时可以调成 1，便于观察超时自动取消
+    pay-timeout-minutes: 30
+    # 超时取消的兜底定时任务。正式方案是阶段 10 的 XXL-JOB，届时改为 false
+    timeout-task-enabled: true
+    timeout-batch-size: 200
+    timeout-task-interval-ms: 60000
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    cn.freedom.huashui: debug

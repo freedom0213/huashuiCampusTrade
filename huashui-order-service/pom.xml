@@ -11,11 +11,11 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>huashui-product-service</artifactId>
+    <artifactId>huashui-order-service</artifactId>
     <packaging>jar</packaging>
 
-    <name>huashui-product-service</name>
-    <description>商品域：分类、商品、图片、列表与筛选</description>
+    <name>huashui-order-service</name>
+    <description>交易域：下单、订单状态机、取消与超时</description>
 
     <dependencies>
         <dependency>
@@ -33,7 +33,32 @@
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
 
-        <!-- 消息队列：消费「订单已取消」消息，把商品恢复为在售 -->
+        <!--
+          服务间调用。本模块是整个项目里唯一发起 Feign 调用的服务：
+          下单要锁商品、付款要把商品置为已售出，都必须问商品域。
+          反向（product → order）刻意不做，会形成循环依赖。
+        -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+
+        <!--
+          ★ 必须显式引入，不能省。
+          Spring Cloud 2023 的 spring-cloud-starter-openfeign 已不再传递引入负载均衡器
+          （早期版本会带上 Ribbon，后来 Ribbon 被移除，改由 Spring Cloud LoadBalancer 承担）。
+          少了它，启动时会直接失败：
+            IllegalStateException: No Feign Client for loadBalancing defined.
+            Did you forget to include spring-cloud-starter-loadbalancer?
+          因为 @FeignClient(name = "huashui-product-service") 写的是服务名，
+          必须有负载均衡器才能把它解析成真实 ip:port。
+        -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+
+        <!-- 消息队列：订单取消后通知商品域恢复在售 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-amqp</artifactId>

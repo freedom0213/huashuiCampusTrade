@@ -46,6 +46,28 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!--
+          服务间调用的契约（Feign 接口）。标记 optional 的原因与 starter-web 相同：
+          只有真正要发起服务间调用的服务才引它（目前只有 order-service），
+          网关与 product-service 不该被动获得一套用不上的自动配置。
+          需要一个服务的调用方自行引入 spring-cloud-starter-openfeign。
+        -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-openfeign-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+          MQ 拓扑与消息转换器（OrderCancelMqTopology）需要 amqp 才能编译。
+          同样标记 optional：只有 order / product 需要，网关不需要。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
