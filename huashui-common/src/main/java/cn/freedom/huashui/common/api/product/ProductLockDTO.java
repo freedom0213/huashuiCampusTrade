@@ -38,4 +38,12 @@ public class ProductLockDTO implements Serializable {
 
     /** 成交单价，写入订单快照 */
     private BigDecimal price;
+
+    /**
+     * 交易地点，写入订单快照。
+     *
+     * <p>面交场景买家据此赴约。必须快照而不能靠 productId 反查商品：
+     * 商品成交后被逻辑删除，订单详情页就会查不到地点。
+     */
+    private String tradePlace;
 }

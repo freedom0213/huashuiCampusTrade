@@ -410,6 +410,7 @@ public class ProductServiceImpl implements ProductService {
         dto.setTitle(product.getTitle());
         dto.setCoverUrl(product.getCoverUrl());
         dto.setPrice(product.getPrice());
+        dto.setTradePlace(product.getTradePlace());
 
         log.info("商品锁定成功 | productId={} | buyerId={} | sellerId={}",
                 productId, buyerId, product.getSellerId());

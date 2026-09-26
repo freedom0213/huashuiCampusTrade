@@ -54,6 +54,12 @@ public class Order implements Serializable {
     /** 商品单价快照（成交价） */
     private BigDecimal productPrice;
 
+    /**
+     * 交易地点快照。面交场景买家据此赴约，必须快照——商品成交后被逻辑删除，
+     * 靠 productId 反查会查不到。创建后不再与商品同步。
+     */
+    private String tradePlace;
+
     /** 订单总额。当前一单一商品，等于单价；保留该字段以便将来支持多商品 */
     private BigDecimal totalAmount;
 

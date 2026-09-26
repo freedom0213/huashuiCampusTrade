@@ -43,6 +43,9 @@ public class OrderVO {
     @Schema(description = "成交单价")
     private BigDecimal productPrice;
 
+    @Schema(description = "交易地点（下单时的快照）。面交场景买家据此赴约")
+    private String tradePlace;
+
     @Schema(description = "订单总额")
     private BigDecimal totalAmount;
 

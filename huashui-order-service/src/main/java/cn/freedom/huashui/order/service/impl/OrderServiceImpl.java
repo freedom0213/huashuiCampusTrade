@@ -317,6 +317,8 @@ public class OrderServiceImpl implements OrderService {
         order.setProductTitle(snapshot.getTitle());
         order.setProductCover(snapshot.getCoverUrl());
         order.setProductPrice(snapshot.getPrice());
+        // 面交地点快照：商品售出后可能被逻辑删除，订单页不能依赖反查商品
+        order.setTradePlace(snapshot.getTradePlace());
         // 当前一单一商品，总额 = 单价。保留该字段是为了将来支持多商品时不改表
         order.setTotalAmount(snapshot.getPrice());
         order.setStatus(OrderStatus.WAITING_PAY.getCode());
@@ -430,6 +432,7 @@ public class OrderServiceImpl implements OrderService {
         vo.setProductTitle(order.getProductTitle());
         vo.setProductCover(order.getProductCover());
         vo.setProductPrice(order.getProductPrice());
+        vo.setTradePlace(order.getTradePlace());
         vo.setTotalAmount(order.getTotalAmount());
         vo.setStatus(order.getStatus());
         OrderStatus status = OrderStatus.of(order.getStatus());
