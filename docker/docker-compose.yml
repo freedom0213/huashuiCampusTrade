@@ -1,0 +1,101 @@
+# ============================================================
+# 华水校园闲置交易平台 —— 本地基础设施
+#
+# 只包含 Redis / RabbitMQ / Nacos 三个中间件。
+# MySQL 使用本机已安装的 8.0.34（3306），不容器化。
+#
+# 【为什么端口不是默认值】
+# 本机同时存在 zhixu(tianji-local) 项目，它占用了默认端口：
+#   6379 / 5672 / 15672 / 8848 / 9848 / 9849
+# 因此这里「容器内端口保持默认，只改宿主机映射」，两套环境可同时运行。
+#
+# 【为什么绑定 127.0.0.1】
+# 不写 IP 时 Docker 会发布到 0.0.0.0，局域网内任何设备都能连上你的
+# Redis / RabbitMQ，属于明显的安全缺口。绑定回环地址后只允许本机访问。
+#
+# 【关于凭据】
+# 下面的账号密码是「本地开发专用」，且服务只绑定 127.0.0.1，不对外网暴露。
+# 这样写是为了让仓库克隆下来即可直接启动。
+# 生产环境应改为通过环境变量 / 密钥管理注入，不要把真实凭据写进配置文件。
+#
+# 启动：docker compose -f docker/docker-compose.yml up -d
+# 停止：docker compose -f docker/docker-compose.yml down
+# 查看：docker compose -f docker/docker-compose.yml ps
+# ============================================================
+name: huashui
+
+services:
+
+  # ---------------- Redis：商品缓存 / 浏览量计数 / 分布式锁 ----------------
+  redis:
+    image: redis:7.2-alpine
+    container_name: huashui-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:16379:6379"
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - huashui@123
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "huashui@123", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ---------------- RabbitMQ：订单取消 → 商品恢复在售 ----------------
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: huashui-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5673:5672"     # AMQP 协议端口
+      - "127.0.0.1:15673:15672"   # 管理台
+    environment:
+      RABBITMQ_DEFAULT_USER: huashui
+      RABBITMQ_DEFAULT_PASS: huashui@123
+      RABBITMQ_DEFAULT_VHOST: /
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # ---------------- Nacos：注册中心 + 配置中心 ----------------
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: huashui-nacos
+    restart: unless-stopped
+    ports:
+      # HTTP 主端口（控制台 + OpenAPI）
+      - "127.0.0.1:18848:8848"
+      # gRPC 端口：客户端会按「主端口 + 1000」自动推导，
+      # 所以宿主机 18848 必须对应 19848，漏映射会报「连不上服务端」且错误信息很含糊
+      - "127.0.0.1:19848:9848"
+      # 集群通信 gRPC（单机模式下用不到，一并映射以便将来切集群）
+      - "127.0.0.1:19849:9849"
+    environment:
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "false"
+      JVM_XMS: 256m
+      JVM_XMX: 512m
+    volumes:
+      - nacos-data:/home/nacos/data
+      - nacos-logs:/home/nacos/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/console/health/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  redis-data:
+  rabbitmq-data:
+  nacos-data:
+  nacos-logs:

@@ -119,34 +119,53 @@ flowchart TB
 
 ## 本地启动
 
-**1. 基础设施**
+**1. 建库建表**
 
 ```bash
-# 建库（3 个 database）
+# 建 3 个 database
 mysql -uroot -p < docs/sql/00-create-database.sql
 
-# 启动基础设施
-docker compose -f docker/docker-compose.yml up -d
+# 建表 + 初始化分类数据（可重复执行，不会清空已有数据）
+mysql -uhuashui -p < docs/sql/01-user.sql
+mysql -uhuashui -p < docs/sql/02-product.sql
+mysql -uhuashui -p < docs/sql/03-order.sql
 ```
 
-**2. 敏感配置**
+**2. 启动基础设施**
 
-数据库密码等敏感项**不提交到仓库**，请复制模板到本地文件后填写：
+```bash
+docker compose -f docker/docker-compose.yml up -d
+docker compose -f docker/docker-compose.yml ps
+```
+
+| 组件 | 访问地址 | 凭据 |
+|---|---|---|
+| Nacos 控制台 | http://127.0.0.1:18848/nacos | 本地未开启鉴权 |
+| RabbitMQ 管理台 | http://127.0.0.1:15673 | `huashui` / `huashui@123` |
+
+> 容器端口只绑定 `127.0.0.1`，局域网内其他设备无法访问。
+> `docker-compose.yml` 中的凭据是**本地开发专用**，生产环境应改为通过环境变量注入。
+
+**3. 敏感配置**
+
+应用侧的数据库密码等**不提交到仓库**，复制模板到本地文件后填写：
 
 ```bash
 cp huashui-user-service/src/main/resources/application-local.yml.example \
    huashui-user-service/src/main/resources/application-local.yml
 ```
 
-**3. 启动服务**
+（该文件在阶段 3 引入 gateway 时创建）
+
+**4. 启动服务**
 
 按顺序启动：`gateway` → `user-service` → `product-service` → `order-service`，在 Nacos 控制台确认注册成功。
 
 ## 开发进度
 
 - [x] 总体设计 V1
-- [ ] 阶段 1：Maven 父工程 + `huashui-common`
-- [ ] 阶段 2：基础设施 + 建库建表
+- [x] 阶段 1：Maven 父工程 + `huashui-common`
+- [x] 阶段 2：基础设施 + 建库建表
 - [ ] 阶段 3：gateway
 - [ ] 阶段 4：user-service
 - [ ] 阶段 5：product-service
