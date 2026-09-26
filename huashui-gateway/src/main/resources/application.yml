@@ -62,6 +62,31 @@ spring:
           filters:
             - StripPrefix=1
 
+        # 分类是独立资源，单独走一条路由。
+        # 若挂在 /api/product/category/** 下，将来管理端的「新增分类」就变成了
+        # 「往商品资源里塞子资源」，语义上说不通。
+        - id: category-service
+          uri: lb://huashui-product-service
+          predicates:
+            - Path=/api/category/**
+          filters:
+            - StripPrefix=1
+
+        # 文件上传（目前由 product-service 提供）
+        - id: file-service
+          uri: lb://huashui-product-service
+          predicates:
+            - Path=/api/file/**
+          filters:
+            - StripPrefix=1
+
+        # 上传的图片：直接透传，不做 StripPrefix，
+        # 因为 product-service 的静态资源映射就是挂在 /uploads/** 上
+        - id: uploads
+          uri: lb://huashui-product-service
+          predicates:
+            - Path=/uploads/**
+
 # ============================================================
 # 业务配置
 # ============================================================
@@ -83,7 +108,11 @@ huashui:
       - /api/user/detail/**
       - /api/product/list
       - /api/product/detail/**
-      - /api/product/category/**
+      # 分类列表对游客开放（首页胶囊行 / 搜索筛选 / 发布页下拉都要用）
+      - /api/category/**
+      # 商品图片对游客开放，否则未登录用户在列表页看不到图
+      # 注意：/api/file/upload 不在白名单内，上传必须登录
+      - /uploads/**
 
 logging:
   level:

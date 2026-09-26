@@ -1,0 +1,79 @@
+# ============================================================
+# 商品服务配置
+# 端口 6003（通过网关 6001 对外）
+# ============================================================
+server:
+  port: 6003
+
+spring:
+  application:
+    name: huashui-product-service
+
+  # 本地敏感配置（数据库账号密码）不提交到仓库
+  config:
+    import: optional:classpath:application-local.yml
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/huashui_product?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  servlet:
+    multipart:
+      # 容器层的第一道闸；业务层还会再校验一次并给出中文提示
+      max-file-size: 5MB
+      max-request-size: 10MB
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:18848
+        namespace: public
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: assign_id
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+huashui:
+  product:
+    # 发布后是否需要管理员审核。
+    # 管理端在阶段 12 才做，在那之前没有任何入口能放行「待审核」商品，
+    # 会导致发布后列表里查不到、整个流程无法自测，因此开发期先关掉。
+    # 阶段 12 接入管理端后改回 true，不需要改代码。
+    audit-required: false
+
+  file:
+    # 上传目录。已加入 .gitignore，不会被提交
+    upload-dir: ./uploads
+    # 对外访问前缀，与下面的静态资源映射、以及网关的 /uploads/** 路由对应
+    url-prefix: /uploads
+    # 白名单校验扩展名：黑名单永远列不全
+    allowed-extensions: jpg,jpeg,png,gif,webp
+    # 5MB
+    max-size: 5242880
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    cn.freedom.huashui: debug

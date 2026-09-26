@@ -25,6 +25,7 @@
         <module>huashui-common</module>
         <module>huashui-gateway</module>
         <module>huashui-user-service</module>
+        <module>huashui-product-service</module>
     </modules>
 
     <properties>

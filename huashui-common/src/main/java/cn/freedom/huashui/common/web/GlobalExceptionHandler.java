@@ -4,6 +4,8 @@ import cn.freedom.huashui.common.exception.BizException;
 import cn.freedom.huashui.common.result.Result;
 import cn.freedom.huashui.common.result.ResultCode;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -11,6 +13,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 全局异常处理。
@@ -81,5 +84,19 @@ public class GlobalExceptionHandler {
     public Result<Void> handleException(Exception e) {
         log.error("系统异常", e);
         return Result.error(ResultCode.SYSTEM_ERROR);
+    }
+
+    /**
+     * 静态资源不存在（未匹配到任何 Controller 的请求最终会走到这里）。
+     *
+     * <p>必须单独处理，否则会被上面的兜底处理器吃成 500：
+     * 图片加载失败会被记成「系统异常」，既污染日志又给了错误的排查方向。
+     * 而且浏览器请求 &lt;img&gt; 时，返回 200 + 错误 JSON 比返回 404 更糟。
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Result<Void>> handleNoResourceFound(NoResourceFoundException e) {
+        log.warn("请求的资源不存在 | {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Result.error(ResultCode.NOT_FOUND));
     }
 }

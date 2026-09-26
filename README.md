@@ -182,6 +182,7 @@ cp huashui-user-service/src/main/resources/application-local.yml.example \
 - [x] 阶段 2：基础设施 + 建库建表
 - [x] 阶段 3：gateway
 - [x] 阶段 4：user-service
+- [x] 阶段 5：product-service
 - [ ] 阶段 4：user-service
 - [ ] 阶段 5：product-service
 - [ ] 阶段 6：前端最小闭环

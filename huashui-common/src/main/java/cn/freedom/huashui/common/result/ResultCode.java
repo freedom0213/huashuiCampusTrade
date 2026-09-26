@@ -44,6 +44,10 @@ public enum ResultCode {
     PRODUCT_STATUS_ILLEGAL(20006, "商品当前状态不允许该操作"),
     ALREADY_FAVORITED(20007, "已经收藏过该商品"),
     NOT_FAVORITED(20008, "尚未收藏该商品"),
+    IMAGE_EMPTY(20009, "请选择要上传的图片"),
+    IMAGE_TYPE_NOT_ALLOWED(20010, "只支持 jpg / jpeg / png / gif / webp 格式的图片"),
+    IMAGE_TOO_LARGE(20011, "图片大小超出限制"),
+    IMAGE_STORE_FAILED(20012, "图片保存失败，请稍后重试"),
 
     // ==================== 交易域 3xxxx ====================
     ORDER_NOT_FOUND(30001, "订单不存在"),
