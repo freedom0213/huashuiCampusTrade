@@ -1,0 +1,3 @@
+cn.freedom.huashui.common.config.JacksonAutoConfiguration
+cn.freedom.huashui.common.config.JwtAutoConfiguration
+cn.freedom.huashui.common.config.WebAutoConfiguration
