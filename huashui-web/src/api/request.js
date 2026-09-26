@@ -85,21 +85,31 @@ service.interceptors.response.use(
   },
   (error) => {
     const status = error.response?.status
-    let message = '网络异常，请稍后重试'
+    const body = error.response?.data
+
+    /* 文案优先级：
+       ① 响应体里的 message（后端 Result，或 vite 代理错误处理给出的结构化原因，
+          如「后端服务未启动或不可达」——比笼统的「系统繁忙」有用得多）
+       ② 按 HTTP 状态码给默认文案 */
+    let message = ''
+    if (body && typeof body === 'object' && body.message) message = body.message
 
     if (status === 401) {
-      message = '登录已过期，请重新登录'
       fireUnauthorized()
+      message = message || '登录已过期，请重新登录'
     } else if (status === 403) {
-      message = '没有操作权限'
+      message = message || '没有操作权限'
     } else if (status === 404) {
-      message = '请求的资源不存在'
+      message = message || '请求的资源不存在'
     } else if (status === 405) {
-      message = '请求方法不支持'
+      message = message || '请求方法不支持'
     } else if (status >= 500) {
-      message = '系统繁忙，请稍后重试'
+      message = message || (status === 503 ? '服务暂不可用，请稍后重试' : '系统繁忙，请稍后重试')
     } else if (error.code === 'ECONNABORTED') {
       message = '请求超时，请检查网络'
+    } else if (!status) {
+      // 请求根本没发出去 / 没收到响应（断网、DNS 失败等）
+      message = '无法连接服务器，请检查网络'
     }
 
     const e = new Error(message)

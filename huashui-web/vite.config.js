@@ -2,6 +2,29 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
+/**
+ * 代理错误处理：后端没启动时，vite 默认回 500 + 一段 HTML，
+ * 浏览器端只能笼统地显示「系统繁忙」，让人误以为平台出了故障。
+ * 这里换成结构化的 503 响应，让前端 toast 能说出真实原因。
+ */
+function onProxyError(target) {
+  return (proxy) => {
+    proxy.on('error', (err, _req, res) => {
+      if (res && typeof res.writeHead === 'function' && !res.headersSent) {
+        res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' })
+        res.end(
+          JSON.stringify({
+            code: 503,
+            message: `后端服务未启动或不可达（${target}）。请先启动基础设施容器与 4 个 Java 服务`
+          })
+        )
+      } else {
+        console.warn(`[proxy error] ${target}: ${err.code || err.message}`)
+      }
+    })
+  }
+}
+
 // 开发环境一律代理到网关 6001，不直连 6002/6003/6004。
 // 这样前端只认「网关」这一个入口，与生产（Nginx → 网关）保持一致。
 export default defineConfig({
@@ -17,14 +40,17 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:6001',
-        changeOrigin: true
+        changeOrigin: true,
+        configure: onProxyError('网关 127.0.0.1:6001')
       },
       // 上传的图片由 product-service 直接映射在 /uploads/**，
       // 网关这条路由不做 StripPrefix，因此这里也不能改写路径。
       '/uploads': {
         target: 'http://127.0.0.1:6001',
-        changeOrigin: true
+        changeOrigin: true,
+        configure: onProxyError('网关 127.0.0.1:6001')
       }
     }
   }
 })
+
