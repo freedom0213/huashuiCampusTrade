@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS t_product
     category_id    BIGINT         NOT NULL COMMENT '分类 id',
     title          VARCHAR(64)    NOT NULL COMMENT '商品标题',
     description    VARCHAR(1000)  NOT NULL DEFAULT '' COMMENT '商品描述',
+    condition_level TINYINT       NOT NULL DEFAULT 1 COMMENT '成色：0 全新，1 九成新，2 七成新，3 五成新及以下',
     price          DECIMAL(10, 2) NOT NULL COMMENT '售价',
     original_price DECIMAL(10, 2)          DEFAULT NULL COMMENT '原价，可为空（用于展示划线价）',
     cover_url      VARCHAR(255)   NOT NULL DEFAULT '' COMMENT '封面图地址',
