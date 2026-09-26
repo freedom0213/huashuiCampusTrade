@@ -1,0 +1,198 @@
+import { createRouter, createWebHistory } from 'vue-router'
+import { getToken } from '@/api/request'
+import PlaceholderView from '@/views/PlaceholderView.vue'
+
+/* ==========================================================
+   路由表 —— 与 docs/02-前端设计V1.md 的 14 个页面一一对应
+   meta 字段说明：
+     title  页面标题（顶栏用）
+     tab    底栏高亮项（home | publish | mine），不参与则留空
+     auth   是否需要登录
+     block  计划在哪个块实现（块 1 只搭骨架，页面按块替换）
+     apis   本页会调用的接口（作为「活清单」，实现时逐条划掉）
+   ========================================================== */
+
+const Placeholder = PlaceholderView
+
+const routes = [
+  {
+    path: '/',
+    name: 'home',
+    component: Placeholder,
+    meta: { title: '首页', tab: 'home', block: 3, apis: ['GET /api/category/list', 'GET /api/product/list'] }
+  },
+  {
+    path: '/search',
+    name: 'search',
+    component: Placeholder,
+    meta: {
+      title: '搜索结果',
+      block: 3,
+      apis: ['GET /api/product/list (kw / categoryId / campus / conditionLevel / sort)']
+    }
+  },
+  {
+    path: '/product/:id',
+    name: 'productDetail',
+    component: Placeholder,
+    meta: {
+      title: '商品详情',
+      block: 3,
+      apis: [
+        'GET /api/product/detail/{id}',
+        'GET /api/user/detail/{sellerId}',
+        'GET /api/order/sold-count/{sellerId}',
+        'POST|DELETE /api/favorite/{id}',
+        'GET /api/user/{sellerId}/contact',
+        'POST /api/order'
+      ]
+    }
+  },
+  {
+    path: '/seller/:id',
+    name: 'seller',
+    component: Placeholder,
+    meta: {
+      title: '卖家主页',
+      block: 3,
+      apis: ['GET /api/user/detail/{id}', 'GET /api/order/sold-count/{id}', 'GET /api/product/list?sellerId=']
+    }
+  },
+  {
+    path: '/publish',
+    name: 'publish',
+    component: Placeholder,
+    meta: {
+      title: '发布商品',
+      tab: 'publish',
+      auth: true,
+      block: 4,
+      apis: ['GET /api/category/list', 'POST /api/file/upload', 'POST /api/product', 'PUT /api/product/{id}']
+    }
+  },
+  {
+    path: '/user/products',
+    name: 'myProducts',
+    component: Placeholder,
+    meta: {
+      title: '我的发布',
+      auth: true,
+      block: 4,
+      apis: [
+        'GET /api/product/mine?status=',
+        'PUT /api/product/{id}/off-shelf',
+        'PUT /api/product/{id}/on-shelf',
+        'DELETE /api/product/{id}'
+      ]
+    }
+  },
+  {
+    path: '/user/orders',
+    name: 'myOrders',
+    component: Placeholder,
+    meta: {
+      title: '我的订单',
+      auth: true,
+      block: 5,
+      apis: ['GET /api/order/mine?role=buyer|seller', 'PUT /api/order/{orderNo}/pay', 'PUT /api/order/{orderNo}/cancel']
+    }
+  },
+  {
+    path: '/order/:orderNo',
+    name: 'orderDetail',
+    component: Placeholder,
+    meta: {
+      title: '订单详情',
+      auth: true,
+      block: 5,
+      apis: [
+        'GET /api/order/detail/{orderNo}',
+        'PUT /api/order/{orderNo}/pay',
+        'PUT /api/order/{orderNo}/complete',
+        'PUT /api/order/{orderNo}/cancel'
+      ]
+    }
+  },
+  {
+    path: '/user/favorites',
+    name: 'favorites',
+    component: Placeholder,
+    meta: { title: '我的收藏', auth: true, block: 6, apis: ['GET /api/favorite/mine', 'DELETE /api/favorite/{id}'] }
+  },
+  {
+    path: '/notices',
+    name: 'notices',
+    component: Placeholder,
+    meta: {
+      title: '通知中心',
+      auth: true,
+      block: 6,
+      apis: ['纯前端聚合：GET /api/product/mine + GET /api/order/mine（无专用接口）']
+    }
+  },
+  {
+    path: '/mine',
+    name: 'mine',
+    component: Placeholder,
+    meta: {
+      title: '我的',
+      tab: 'mine',
+      auth: true,
+      block: 2,
+      apis: ['GET /api/user/info', 'GET /api/product/mine?size=1', 'GET /api/order/mine?size=1', 'GET /api/favorite/mine?size=1']
+    }
+  },
+  {
+    path: '/user/profile',
+    name: 'profile',
+    component: Placeholder,
+    meta: {
+      title: '个人资料',
+      auth: true,
+      block: 2,
+      apis: ['GET /api/user/info', 'PUT /api/user/info', 'PUT /api/user/password', 'POST /api/file/upload']
+    }
+  },
+  {
+    path: '/login',
+    name: 'login',
+    component: Placeholder,
+    meta: { title: '登录', block: 2, apis: ['POST /api/user/login'], guestOnly: true }
+  },
+  {
+    path: '/register',
+    name: 'register',
+    component: Placeholder,
+    meta: { title: '注册', block: 2, apis: ['POST /api/user/register'], guestOnly: true }
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'notFound',
+    component: Placeholder,
+    meta: { title: '页面不存在' }
+  }
+]
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes,
+  scrollBehavior() {
+    return { top: 0 }
+  }
+})
+
+/* 路由守卫：只做「有没有 token」这一层判定。
+   真正的权限（是不是本人、是不是买卖双方）由后端判定，前端不重复实现。 */
+router.beforeEach((to) => {
+  const logged = !!getToken()
+
+  if (to.meta.auth && !logged) {
+    return { path: '/login', query: { redirect: to.fullPath } }
+  }
+  if (to.meta.guestOnly && logged) {
+    return { path: '/' }
+  }
+  return true
+})
+
+export default router

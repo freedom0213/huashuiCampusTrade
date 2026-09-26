@@ -1,0 +1,15 @@
+# 依赖与构建产物
+node_modules/
+dist/
+dist-ssr/
+
+# 本地环境变量（不要提交）
+.env.local
+.env.*.local
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+*.iml
+.DS_Store
+*.log

@@ -1,0 +1,339 @@
+@import './variables.css';
+
+/* ===================== 基础重置 ===================== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC',
+    'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  font-size: var(--fs-2);
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--grad-page);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+  font-weight: inherit;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  border: none;
+  outline: none;
+  background: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-3);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+/* 移动端惯性滚动 + 隐藏滚动条（保持版面干净） */
+.scroll-y {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.scroll-y::-webkit-scrollbar {
+  display: none;
+}
+
+/* ===================== 应用外壳 =====================
+   真机上是满屏 H5；桌面上限宽 480px 居中，方便开发时查看。
+   设计稿的手机边框只是展示用的画框，不进入真实代码。
+
+   🔴 高度必须是「确定值」（height，不能是 min-height）：
+      若用 min-height，外壳会被内容撑高 → .app-body 的 flex:1 失去确定的参照高度
+      → .page 的 height:100% 失效 → 内部滚动区被撑开不滚动、底栏被顶到视口之外。
+      已用无头实测验证过（改前 SCROLLER CANSCROLL:false、TABBAR bottom 1463 > 视口 844）。 */
+.app-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 480px;
+  height: 100%;
+  margin: 0 auto;
+  background: var(--grad-page);
+  overflow: hidden;
+}
+
+/* 移动端浏览器地址栏会伸缩，100dvh 比 100% 更贴合实际可视高度 */
+@supports (height: 100dvh) {
+  .app-shell {
+    height: 100dvh;
+  }
+}
+
+/* 页面主体：占满剩余高度并独立滚动，保证顶栏/底栏固定 */
+.app-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+/* 单个页面的根容器：内部自行分「顶栏 / 滚动区 / 底部条」 */
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.page-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.page-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* ===================== 通用组件基元 ===================== */
+
+/* 顶部导航（毛玻璃，Apple 风格） */
+.nav-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  padding: 0 var(--gap-page);
+  padding-top: var(--safe-top);
+  height: calc(44px + var(--safe-top));
+  font-size: var(--fs-3);
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+}
+.nav-bar .nav-left,
+.nav-bar .nav-right {
+  position: absolute;
+  top: var(--safe-top);
+  height: 44px;
+  display: flex;
+  align-items: center;
+}
+.nav-bar .nav-left {
+  left: 8px;
+}
+.nav-bar .nav-right {
+  right: var(--gap-page);
+  font-size: var(--fs-2);
+  font-weight: 400;
+  color: var(--pink-dp);
+}
+
+/* 主按钮：渐变填充，不用纯色 */
+.btn-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 48px;
+  border-radius: var(--r-btn);
+  background: var(--grad-btn);
+  color: #fff;
+  font-size: var(--fs-3);
+  font-weight: 600;
+  box-shadow: 0 6px 16px rgba(236, 110, 156, 0.28);
+}
+.btn-main:disabled {
+  background: var(--field);
+  color: var(--text-3);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* 次级按钮 */
+.btn-ghost {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  border-radius: var(--r-btn);
+  background: var(--field);
+  color: #3a3a3c;
+  font-size: var(--fs-3);
+}
+
+/* 可选中的胶囊（分类、排序、筛选项） */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  background: var(--field);
+  color: #4a4a4c;
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+.chip.on {
+  background: var(--pink-bg);
+  color: var(--pink-dp);
+  font-weight: 500;
+}
+
+/* 状态标签：语义色只在这里出现 */
+.stag {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 7px;
+  border-radius: 6px;
+  font-size: var(--fs-1);
+  background: var(--field);
+  color: var(--text-2);
+}
+.stag.ok {
+  background: rgba(52, 199, 89, 0.1);
+  color: var(--green);
+}
+.stag.warn {
+  background: rgba(255, 149, 0, 0.11);
+  color: var(--orange);
+}
+.stag.err {
+  background: rgba(255, 59, 48, 0.09);
+  color: var(--red);
+}
+.stag.dead {
+  background: var(--field);
+  color: var(--text-3);
+}
+
+/* 价格 */
+.price {
+  color: var(--pink-dp);
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  font-variant-numeric: tabular-nums;
+}
+.price .rmb {
+  font-size: 0.72em;
+  margin-right: 1px;
+}
+.origin {
+  font-size: var(--fs-1);
+  color: var(--text-3);
+  text-decoration: line-through;
+}
+
+/* 头像：渐变圆 + 白色人像图标，禁止用姓氏首字 */
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  background: var(--grad-avatar);
+  color: #fff;
+  overflow: hidden;
+}
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ===================== 全站动效 ===================== */
+
+/* 列表依次入场：任何列表项都走同一套语言 */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 0.5s var(--ease) backwards;
+}
+.rise-1 { animation-delay: 0.05s; }
+.rise-2 { animation-delay: 0.11s; }
+.rise-3 { animation-delay: 0.17s; }
+.rise-4 { animation-delay: 0.23s; }
+.rise-5 { animation-delay: 0.29s; }
+
+/* 全站按压回弹 */
+.press {
+  transition: transform 0.3s var(--ease-pop);
+}
+.press:active {
+  transform: scale(0.92);
+}
+
+/* 无障碍：用户开了「减弱动态效果」就关掉动画 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
