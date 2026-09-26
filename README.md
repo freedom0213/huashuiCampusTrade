@@ -91,16 +91,35 @@ flowchart TB
 | `huashui-product-service` | 商品域：商品、分类、图片、收藏、审核、缓存 |
 | `huashui-order-service` | 交易域：下单、订单状态流转、超时取消、消息投递 |
 
+## 端口规划
+
+本机同时存在其他项目，为避免端口冲突，本项目统一使用非默认端口（容器内端口保持默认，仅映射到宿主机时改变）。
+
+**应用服务**
+
+| 模块 | 端口 |
+|---|---|
+| `huashui-gateway` | 6001 |
+| `huashui-user-service` | 6002 |
+| `huashui-product-service` | 6003 |
+| `huashui-order-service` | 6004 |
+
+**基础设施**
+
+| 组件 | 容器内端口 | 宿主机端口 | 方式 |
+|---|---|---|---|
+| MySQL 8.0 | — | 3306 | 本地安装（不容器化） |
+| Redis | 6379 | 16379 | Docker Compose |
+| RabbitMQ AMQP | 5672 | 5673 | Docker Compose |
+| RabbitMQ 管理台 | 15672 | 15673 | Docker Compose |
+| Nacos HTTP | 8848 | 18848 | Docker Compose |
+| Nacos gRPC | 9848 / 9849 | 19848 / 19849 | Docker Compose |
+
+> Nacos 客户端的 gRPC 端口按「主端口 + 1000 / +1001」推导，因此 `18848` 对应 `19848` / `19849`。
+
 ## 本地启动
 
 **1. 基础设施**
-
-| 组件 | 方式 | 端口 |
-|---|---|---|
-| MySQL 8.0 | 本地安装 | 3306 |
-| Redis | Docker Compose | 6379 |
-| RabbitMQ | Docker Compose | 5672 / 15672 |
-| Nacos | Docker Compose | 8848 |
 
 ```bash
 # 建库（3 个 database）
