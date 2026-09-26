@@ -1,0 +1,39 @@
+# ===== Java / Maven =====
+target/
+*.class
+*.war
+
+# ===== IDE =====
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+
+# ===== 日志 =====
+logs/
+*.log
+*.log.*
+
+# ===== 项目运行时产物 =====
+uploads/
+temp/
+
+# ===== 敏感配置：本仓库为公开仓库，真实密码 / 密钥绝不提交 =====
+application-local.yml
+application-local.yaml
+**/application-local.yml
+**/application-local.yaml
+.env
+.env.local
+
+# ===== WorkBuddy 工作区数据（含内部笔记，不对外）=====
+.workbuddy/
+
+# ===== 操作系统 =====
+.DS_Store
+Thumbs.db
+desktop.ini
