@@ -1,0 +1,160 @@
+<script setup>
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import FormField from '@/components/FormField.vue'
+import { useUserStore } from '@/stores/user'
+import { toastFromError, toastOk } from '@/composables/useToast'
+import { requireValue } from '@/utils/validate'
+
+/* 登录页。
+   设计稿图注：「不做整站强制登录，只在点收藏 / 下单 / 发布时拦截；登录成功后原地返回并继续原动作。」
+   → 所以这里必须支持 ?redirect= 回跳。 */
+
+const route = useRoute()
+const router = useRouter()
+const store = useUserStore()
+
+const username = ref(String(route.query.username || ''))
+const password = ref('')
+const errors = ref({ username: '', password: '' })
+const loading = ref(false)
+
+const canSubmit = computed(() => username.value.trim() !== '' && password.value !== '' && !loading.value)
+
+async function submit() {
+  errors.value.username = requireValue(username.value, '用户名')
+  errors.value.password = requireValue(password.value, '密码')
+  if (errors.value.username || errors.value.password) return
+
+  loading.value = true
+  try {
+    await store.login({ username: username.value.trim(), password: password.value })
+    toastOk('登录成功')
+    const redirect = String(route.query.redirect || '/')
+    router.replace(redirect)
+  } catch (e) {
+    // 后端刻意把「用户不存在」与「密码错误」合成同一个 10004，防止枚举用户名
+    toastFromError(e, '登录失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function goRegister() {
+  router.push('/register')
+}
+</script>
+
+<template>
+  <div class="page">
+    <div class="page-scroll safe-top">
+      <div class="authwrap">
+        <div class="brand rise">
+          <div class="logo">华水</div>
+          <h1>华水闲置</h1>
+          <p>校园闲置 · 当面自提</p>
+        </div>
+
+        <div class="rise rise-1">
+          <FormField
+            v-model="username"
+            placeholder="用户名"
+            autocomplete="username"
+            :error="errors.username"
+            @update:model-value="errors.username = ''"
+          />
+          <FormField
+            v-model="password"
+            type="password"
+            placeholder="密码"
+            autocomplete="current-password"
+            :error="errors.password"
+            @keyup.enter="submit"
+            @update:model-value="errors.password = ''"
+          />
+        </div>
+
+        <button class="btn-main wide rise rise-2" :disabled="!canSubmit" @click="submit">
+          {{ loading ? '登录中…' : '登录' }}
+        </button>
+
+        <div class="switchrow rise rise-3">
+          还没有账号？<b class="press" @click="goRegister">立即注册</b>
+        </div>
+        <p class="agree rise rise-3">登录即表示同意 <em>《用户协议》</em> 与 <em>《隐私政策》</em></p>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.safe-top {
+  padding-top: calc(var(--safe-top) + 26px);
+}
+
+.authwrap {
+  padding: 0 28px;
+}
+
+.brand {
+  text-align: center;
+  padding: 26px 0 34px;
+}
+.logo {
+  width: 62px;
+  height: 62px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+  background: var(--grad-avatar);
+  color: #fff;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  box-shadow: 0 8px 22px rgba(236, 110, 156, 0.3);
+}
+.brand h1 {
+  margin-top: 15px;
+  font-size: var(--fs-4);
+  font-weight: 600;
+  letter-spacing: -0.4px;
+}
+.brand p {
+  margin-top: 7px;
+  font-size: var(--fs-1);
+  color: var(--text-2);
+  letter-spacing: 1px;
+}
+
+.wide {
+  width: 100%;
+  margin-top: 28px;
+}
+
+.switchrow {
+  margin-top: 24px;
+  text-align: center;
+  font-size: var(--fs-2);
+  color: var(--text-2);
+}
+.switchrow b {
+  color: var(--pink-dp);
+  font-weight: 500;
+  cursor: pointer;
+  margin-left: 4px;
+}
+
+.agree {
+  margin-top: 30px;
+  text-align: center;
+  font-size: 10.5px;
+  color: var(--text-3);
+  line-height: 1.7;
+}
+.agree em {
+  font-style: normal;
+  color: var(--text-2);
+}
+</style>

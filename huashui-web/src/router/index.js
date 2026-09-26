@@ -133,37 +133,39 @@ const routes = [
   {
     path: '/mine',
     name: 'mine',
-    component: Placeholder,
+    // 块 2 已实现
+    component: () => import('@/views/MineView.vue'),
     meta: {
       title: '我的',
       tab: 'mine',
       auth: true,
-      block: 2,
-      apis: ['GET /api/user/info', 'GET /api/product/mine?size=1', 'GET /api/order/mine?size=1', 'GET /api/favorite/mine?size=1']
+      apis: ['GET /api/user/info', 'GET /api/product/mine', 'GET /api/order/mine?status=0', 'GET /api/favorite/mine?size=1']
     }
   },
   {
     path: '/user/profile',
     name: 'profile',
-    component: Placeholder,
+    // 块 2 已实现
+    component: () => import('@/views/ProfileView.vue'),
     meta: {
       title: '个人资料',
       auth: true,
-      block: 2,
       apis: ['GET /api/user/info', 'PUT /api/user/info', 'PUT /api/user/password', 'POST /api/file/upload']
     }
   },
   {
     path: '/login',
     name: 'login',
-    component: Placeholder,
-    meta: { title: '登录', block: 2, apis: ['POST /api/user/login'], guestOnly: true }
+    // 块 2 已实现
+    component: () => import('@/views/LoginView.vue'),
+    meta: { title: '登录', apis: ['POST /api/user/login'], guestOnly: true }
   },
   {
     path: '/register',
     name: 'register',
-    component: Placeholder,
-    meta: { title: '注册', block: 2, apis: ['POST /api/user/register'], guestOnly: true }
+    // 块 2 已实现
+    component: () => import('@/views/RegisterView.vue'),
+    meta: { title: '注册', apis: ['POST /api/user/register'], guestOnly: true }
   },
   {
     path: '/:pathMatch(.*)*',
