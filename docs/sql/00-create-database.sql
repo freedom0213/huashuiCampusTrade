@@ -5,6 +5,9 @@
 -- 执行方式：mysql -uroot -p < 00-create-database.sql
 -- ============================================================
 
+-- 【必须保留】强制声明连接字符集为 utf8mb4，原因见 01-user.sql 中的说明。
+SET NAMES utf8mb4;
+
 -- 用户域
 CREATE DATABASE IF NOT EXISTS huashui_user
     DEFAULT CHARACTER SET utf8mb4

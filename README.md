@@ -131,6 +131,20 @@ mysql -uhuashui -p < docs/sql/02-product.sql
 mysql -uhuashui -p < docs/sql/03-order.sql
 ```
 
+表结构变更后可重置重建（⚠️ 会删除数据，仅限开发期）：
+
+```bash
+mysql -uhuashui -p < docs/sql/99-reset-tables.sql   # 先删表
+mysql -uhuashui -p < docs/sql/01-user.sql           # 再依次重建
+mysql -uhuashui -p < docs/sql/02-product.sql
+mysql -uhuashui -p < docs/sql/03-order.sql
+```
+
+> ⚠️ **脚本必需项**：所有 SQL 脚本顶部都有 `SET NAMES utf8mb4;`。
+> 中文 Windows 下 mysql 客户端默认字符集是 `gbk`，而脚本文件是 UTF-8，
+> 缺少这一行会把中文写成双重编码的乱码——且这种乱码在同样用 gbk 读取时看起来是正常的，
+> 只有 IDEA / Navicat 这类 UTF-8 工具才会暴露。**排查用 `SELECT HEX(列名), LENGTH(列名)`。**
+
 **2. 启动基础设施**
 
 ```bash
