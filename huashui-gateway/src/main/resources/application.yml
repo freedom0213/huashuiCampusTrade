@@ -78,6 +78,9 @@ huashui:
     white-list:
       - /api/user/login
       - /api/user/register
+      # 卖家主页对游客开放（只返回昵称/头像/院系，不含手机号）
+      # 注意：/api/user/{id}/contact 不在白名单内，手机号必须登录后才能取
+      - /api/user/detail/**
       - /api/product/list
       - /api/product/detail/**
       - /api/product/category/**
