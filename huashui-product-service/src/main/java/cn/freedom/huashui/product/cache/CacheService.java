@@ -184,6 +184,34 @@ public class CacheService {
         return objectMapper.getTypeFactory().constructCollectionType(List.class, elementType);
     }
 
+    /**
+     * 尝试标记「这条消息已处理」，用于 MQ 消费幂等。
+     *
+     * <p>它的定位是<b>减少无效执行</b>，而不是保证正确性 ——
+     * 正确性由消费逻辑自身的幂等性兜底（商品解锁是条件更新，重复执行无副作用）。
+     *
+     * @param key 去重标记的 key
+     * @param ttl 标记保留时长，应长于消息可能的重投窗口
+     * @return {@code true} 表示标记成功（第一次见到）；{@code false} 表示之前已处理过
+     */
+    public boolean tryMarkProcessed(String key, Duration ttl) {
+        Boolean ok = redisTemplate.opsForValue().setIfAbsent(key, "1", ttl);
+        return Boolean.TRUE.equals(ok);
+    }
+
+    /**
+     * 撤销「已处理」标记。
+     *
+     * <p><b>这一步在消费失败时不能省。</b>
+     * 「先标记、再执行业务」这个顺序天然有风险：一旦业务执行失败、标记却留下了，
+     * 消息重投时会被判成「已处理」直接跳过 ——
+     * <b>消息被永久丢弃，而且不报任何错</b>。所以业务失败必须把标记删掉，
+     * 让重投能真正重跑一遍业务。
+     */
+    public void clearMark(String key) {
+        delete(key);
+    }
+
     /** 查看 key 是否存在（调试与测试用） */
     public boolean exists(String key) {
         return Boolean.TRUE.equals(redisTemplate.hasKey(key));

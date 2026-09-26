@@ -13,9 +13,11 @@ USE huashui_order;
 -- 状态机：0 待支付 → 1 已付款 → 2 交易完成（终态）
 --         分支   0 待支付 → 3 已取消（终态）→ MQ 通知商品域恢复「在售」
 --
--- 【为什么冗余商品标题 / 封面 / 价格】
+-- 【为什么冗余商品标题 / 封面 / 价格 / 交易地点】
 --   1. 业务刚需：成交价必须快照。卖家事后改价不能影响历史订单。
 --   2. 顺带解决跨库查询：order 库不需要 JOIN product 库的表。
+--   3. trade_place 是面交场景的刚需：订单详情页要告诉买家「去哪见面」，
+--      若靠 productId 反查商品，商品被逻辑删除后就查不到了，所以一并快照。
 --   规则：订单一旦创建，快照不再与商品同步。
 --
 -- 【为什么没有 deleted 字段】
@@ -31,6 +33,7 @@ CREATE TABLE IF NOT EXISTS t_orders
     product_title VARCHAR(64)    NOT NULL COMMENT '商品标题快照',
     product_cover VARCHAR(255)   NOT NULL DEFAULT '' COMMENT '商品封面快照',
     product_price DECIMAL(10, 2) NOT NULL COMMENT '商品单价快照（成交价）',
+    trade_place   VARCHAR(128)   NOT NULL DEFAULT '' COMMENT '交易地点快照（面交场景买家据此赴约），创建后不再同步',
     total_amount  DECIMAL(10, 2) NOT NULL COMMENT '订单总额。当前一单一商品，等于单价；保留该字段以便将来支持多商品',
     status        TINYINT        NOT NULL DEFAULT 0 COMMENT '状态：0 待支付，1 已付款，2 交易完成，3 已取消',
     close_deadline DATETIME      NOT NULL COMMENT '支付截止时间（创建时间 + 配置的超时分钟数）。XXL-JOB 据此字段扫描超时订单',

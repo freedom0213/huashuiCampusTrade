@@ -8,6 +8,8 @@ import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.Declarable;
+import org.springframework.amqp.core.Declarables;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
@@ -18,16 +20,27 @@ import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * 「订单取消 → 商品恢复在售」这条消息链路的完整拓扑。
  *
  * <pre>
  *   order-service ──publish──→ trade.topic ──order.canceled──→ order.cancel.queue ──→ 消费
  *                                                                      │
- *                                                          消费失败 nack(requeue=false)
- *                                                                      ↓
- *                                            order.cancel.dlx ──→ order.cancel.dlq（人工介入）
+ *                                             ┌────── 消费失败 ────────┴──── 重试次数超限
+ *                                             ↓                                    ↓
+ *                             order.cancel.dlx → 延迟队列(1s/2s/4s)      order.cancel.dlx
+ *                                             │      ↑ TTL 到期后                → order.cancel.dlq
+ *                                             └──────┘ 自动回到业务队列           （人工介入）
  * </pre>
+ *
+ * <p><b>重试为什么用「延迟队列」这种绕法：</b>
+ * RabbitMQ 本身没有延迟队列类型，业界通用做法是「队列设 {@code x-message-ttl} +
+ * {@code x-dead-letter-exchange} 指回业务交换机」——消息在队列里躺够 TTL 就当死信被投回去。
+ * 这样不需要引入额外的延迟插件，也不需要让消费者线程 {@code sleep}（那会占住消费线程）。
+ * 代价是每个延迟档位要单独一个队列（TTL 是队列级参数，不能按消息设——按消息设会有队头阻塞）。
  *
  * <p><b>为什么放在 common，而不是各自声明一份：</b>
  * 生产方（order）与消费方（product）都必须在自己的连接上声明拓扑——生产方不声明，
@@ -41,11 +54,10 @@ import org.springframework.context.annotation.Configuration;
  * 而不是做成 SPI 自动配置——「启动时创建队列」是有副作用的动作，
  * 让它显式出现在服务自己的配置里（能 grep 到），比藏在自动配置中更容易排查。
  *
- * <p><b>为什么现在就配死信队列（消息可靠性是阶段 9 的事）：</b>
- * <b>队列的参数在创建后不可修改</b>。现在不把 {@code x-dead-letter-exchange} 写上，
- * 阶段 9 就得删掉队列重建，而那时队列里可能已经积压了消息。
- * 所以拓扑要一次声明到位；阶段 9 补的是「发送侧」的可靠性
- * （Confirm 回调 / 本地消息表 / 退避重试），与拓扑无关。
+ * <p><b>为什么拓扑在阶段 7 就一次声明到位：</b>
+ * <b>队列的参数在创建后不可修改</b>。缺了 {@code x-dead-letter-exchange} 或 TTL，
+ * 后期再补就得删掉队列重建，而那时队列里可能已经积压了消息。
+ * 所以阶段 7 就配好死信、阶段 9 再加延迟重试队列（新增队列是安全的，改才不安全）。
  *
  * @author freedom0213
  */
@@ -94,6 +106,65 @@ public class OrderCancelMqTopology {
     }
 
     /**
+     * 各档延迟重试队列及其绑定。
+     *
+     * <p>用 {@link Declarables} 一次声明而不是写 N 个 {@code @Bean}：
+     * 三个队列的差别只有 TTL 和名字，写成三个方法就是三份复制粘贴，
+     * 而「复制出来的副本会慢慢和原件不一致」这件事在 阶段 7 已经吃过一次（ProductConverter 的由来）。
+     * 现在档位由 {@link MqConstants#ORDER_CANCEL_RETRY_DELAYS_MS} 一处决定。
+     *
+     * <p>每个队列的两个关键参数：
+     * <ul>
+     *   <li>{@code x-message-ttl} —— 消息在此队列等待多久（即本轮重试的退避时间）；</li>
+     *   <li>{@code x-dead-letter-exchange/routing-key} —— TTL 到期后送回<b>业务交换机</b>，
+     *       于是消息重新进入 {@code order.cancel.queue} 被再次消费。</li>
+     * </ul>
+     *
+     * @param orderCancelDlx 死信交换机（延迟队列从这里接收消息）
+     * @return 批量声明的队列与绑定
+     */
+    @Bean
+    public Declarables orderCancelRetryDeclarables(DirectExchange orderCancelDlx) {
+        List<Declarable> declarables = new ArrayList<>();
+        for (int level = 1; level <= MqConstants.ORDER_CANCEL_MAX_RETRY; level++) {
+            long delayMs = MqConstants.ORDER_CANCEL_RETRY_DELAYS_MS[level - 1];
+            Queue queue = QueueBuilder.durable(MqConstants.orderCancelRetryQueue(level))
+                    .ttl((int) delayMs)
+                    // TTL 到期后送回业务交换机，而不是送回死信队列 ——
+                    // 送回死信队列就等于直接放弃了重试
+                    .deadLetterExchange(MqConstants.TRADE_EXCHANGE)
+                    .deadLetterRoutingKey(MqConstants.ORDER_CANCEL_ROUTING_KEY)
+                    .build();
+            declarables.add(queue);
+            declarables.add(BindingBuilder.bind(queue)
+                    .to(orderCancelDlx)
+                    .with(MqConstants.orderCancelRetryRoutingKey(level)));
+        }
+        return new Declarables(declarables);
+    }
+
+    /**
+     * 消息体专用的 ObjectMapper，与 {@link #jsonMessageConverter()} 用同一份配置。
+     *
+     * <p>单独立一个 Bean 是被验证环节逼出来的：死信重放要解析消息体，
+     * 注入容器里那个 ObjectMapper 的话——它把 LocalDateTime 定成 {@code yyyy-MM-dd HH:mm:ss}
+     * （为浏览器前端定的），而消息转换器写的是 ISO-8601。格式对不上，
+     * 「自己服务发出的消息自己解析不了」，重放功能整体失效。
+     * 消息体是服务间契约，读写必须同一份规则。
+     *
+     * @return 消息体专用的 ObjectMapper
+     */
+    @Bean
+    public ObjectMapper mqObjectMapper() {
+        ObjectMapper mapper = JsonMapper.builder()
+                .addModule(new JavaTimeModule())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                .build();
+        return mapper;
+    }
+
+    /**
      * JSON 消息转换器。
      *
      * <p><b>刻意新建一个独立的 ObjectMapper，而不是注入 Spring 容器里那个。</b>
@@ -108,16 +179,8 @@ public class OrderCancelMqTopology {
      * @return JSON 消息转换器
      */
     @Bean
-    public MessageConverter jsonMessageConverter() {
-        ObjectMapper mapper = JsonMapper.builder()
-                .addModule(new JavaTimeModule())
-                // LocalDateTime 写成 ISO-8601 字符串，而不是默认的时间戳数组
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-                // 消费端版本落后于生产端时（消息里多了字段）不应直接失败，便于两端分批上线
-                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-                .build();
-
-        Jackson2JsonMessageConverter converter = new Jackson2JsonMessageConverter(mapper);
+    public MessageConverter jsonMessageConverter(ObjectMapper mqObjectMapper) {
+        Jackson2JsonMessageConverter converter = new Jackson2JsonMessageConverter(mqObjectMapper);
         // 注意导入位置：TypePrecedence 是 Jackson2JavaTypeMapper 的内部枚举，
         // 不在 Jackson2JsonMessageConverter 里；而 setTypePrecedence 由
         // AbstractJackson2MessageConverter 提供。写错位置编译期就报「找不到符号」

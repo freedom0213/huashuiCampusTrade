@@ -23,6 +23,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
@@ -62,6 +63,12 @@ public class OrderServiceImpl implements OrderService {
     private final PayService payService;
     private final OrderMessageSender messageSender;
     private final OrderProperties orderProperties;
+
+    /**
+     * 编程式事务。为什么用它而不是 {@code @Transactional} 注解，
+     * 见 {@link #transitToCancelled} 的注释 —— 那里有个很容易埋雷的坑。
+     */
+    private final TransactionTemplate transactionTemplate;
 
     // ==================== 下单 ====================
 
@@ -211,9 +218,9 @@ public class OrderServiceImpl implements OrderService {
                 ? reason.trim()
                 : defaultCancelReason(order, userId);
 
-        // 不加 @Transactional：本方法只有一条 UPDATE，InnoDB 单语句本身就是原子的。
-        // 更重要的是——「消息必须在状态变更成功之后才发」这条顺序不能被打乱，
-        // 而套上事务后，后来者很容易在中间插一条写操作而没意识到顺序被破坏了。
+        // 这里刻意不加 @Transactional：本方法内只有 transitToCancelled 这一处写操作，
+        // 而它内部用 TransactionTemplate 自己开了事务（订单流转 + 消息落库必须原子）。
+        // 在外面再套一层只会让事务边界变模糊，不会多任何保证。
         //
         // 不能取消的状态：已付款之后。资金已线下交割、商品已是「已售出」终态，
         // 本项目不做退款与退货（总设已冻结），纠纷由双方线下解决。
@@ -261,25 +268,44 @@ public class OrderServiceImpl implements OrderService {
      * 把订单流转为「已取消」，返回是否真的发生了流转。
      *
      * <p>买家主动取消、卖家主动取消、超时自动取消三条路径共用，
-     * 保证「状态变更 + 发消息」这个顺序只写一遍。
+     * 保证「状态变更 + 记录要发的消息」这一对动作只写一遍。
+     *
+     * <p><b>为什么这两件事必须在一个本地事务里：</b>
+     * <ul>
+     *   <li>只成功前一件 → 订单取消了，但没有任何机制会去解锁商品，<b>商品永久锁死</b>；</li>
+     *   <li>只成功后一件 → 发出一个「取消了一笔其实没被取消的订单」的消息，
+     *       商品被错误解锁，可能被第二个人买走，形成<b>超卖</b>。</li>
+     * </ul>
+     *
+     * <p><b>为什么用 {@link TransactionTemplate} 而不是 {@code @Transactional} 注解：</b>
+     * <ol>
+     *   <li>超时取消任务是在循环里逐单处理的，把注解加在任务方法上会误伤成
+     *       「一个长事务包住整批 200 单」，锁住大量行；</li>
+     *   <li>本方法是<b>私有方法</b>，而 {@code @Transactional} 靠 Spring 代理生效，
+     *       写在私有方法上<b>不会报错、也不会生效</b> —— 代码看起来有事务，实际在裸奔。
+     *       这是本项目里最容易埋雷的一处，所以干脆用编程式事务，让事务边界在代码里看得见。</li>
+     * </ol>
      */
     private boolean transitToCancelled(Order order, String reason) {
-        LocalDateTime now = LocalDateTime.now();
-        int affected = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
-                .eq(Order::getOrderNo, order.getOrderNo())
-                .eq(Order::getStatus, OrderStatus.WAITING_PAY.getCode())
-                .set(Order::getStatus, OrderStatus.CANCELLED.getCode())
-                .set(Order::getCancelTime, now)
-                .set(Order::getCancelReason, reason)
-                .set(Order::getUpdateTime, now));
-        if (affected == 0) {
-            return false;
-        }
-        // 状态已落库、且已提交，现在才发消息。
-        // 顺序反过来的话，一旦状态更新失败，商品会被错误地解锁——
-        // 而订单其实还在，商品可能被第二个人买走
-        messageSender.sendOrderCancelled(order, reason);
-        return true;
+        Boolean changed = transactionTemplate.execute(status -> {
+            LocalDateTime now = LocalDateTime.now();
+            int affected = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
+                    .eq(Order::getOrderNo, order.getOrderNo())
+                    .eq(Order::getStatus, OrderStatus.WAITING_PAY.getCode())
+                    .set(Order::getStatus, OrderStatus.CANCELLED.getCode())
+                    .set(Order::getCancelTime, now)
+                    .set(Order::getCancelReason, reason)
+                    .set(Order::getUpdateTime, now));
+            if (affected == 0) {
+                // 前置状态已不匹配（这段时间里被付款了、或已被别人取消）→ 直接结束
+                return false;
+            }
+            // 与上面那条 UPDATE 同事务落库。
+            // 真正的投递由 OrderMessageSender 注册的「提交后回调」触发，不在这里发
+            messageSender.recordOrderCancelled(order, reason);
+            return true;
+        });
+        return Boolean.TRUE.equals(changed);
     }
 
     private Order buildOrder(ProductLockDTO snapshot, Long buyerId) {

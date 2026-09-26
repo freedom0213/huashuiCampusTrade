@@ -34,6 +34,19 @@ public final class RedisKeys {
     /** 登出 token 黑名单（90% 阶段可选） */
     public static final String AUTH_BLACKLIST = "auth:blacklist:";
 
+    /**
+     * 已消费消息标记（MQ 消费幂等去重），String。
+     *
+     * <p>注意它的定位是「<b>减少无效执行</b>」而不是「保证正确性」：
+     * 正确性由消费逻辑自身的幂等性兜底（例如商品解锁是条件更新）。
+     * 这个标记只是让重复消息不必再做一次注定无效果的数据库写。
+     */
+    public static final String MQ_CONSUMED = "mq:consumed:";
+
+    public static String mqConsumed(String msgId) {
+        return MQ_CONSUMED + msgId;
+    }
+
     public static String productDetail(Long productId) {
         return PRODUCT_DETAIL + productId;
     }

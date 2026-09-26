@@ -32,4 +32,18 @@ public class OrderProperties {
 
     /** 兜底任务的执行间隔（毫秒） */
     private long timeoutTaskIntervalMs = 60000L;
+
+    // ==================== 本地消息表（消息可靠性） ====================
+
+    /** 最大补发次数。超过则转为「失败待人工处理」，不再自动重试 */
+    private int localMessageMaxRetry = 5;
+
+    /** 补发任务是否启用（正式方案是阶段 10 的 XXL-JOB，届时关掉本开关即可） */
+    private boolean localMessageTaskEnabled = true;
+
+    /** 补发任务每轮最多处理多少条 */
+    private int localMessageBatchSize = 100;
+
+    /** 补发任务的执行间隔（毫秒） */
+    private long localMessageTaskIntervalMs = 30000L;
 }

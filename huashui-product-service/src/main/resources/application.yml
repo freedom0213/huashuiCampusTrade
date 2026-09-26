@@ -57,6 +57,13 @@ spring:
         max-concurrency: 3
         # 每次只预取 1 条，避免消息被一个消费者全部揽在手里、其他消费者空转
         prefetch: 1
+        # 刻意关掉框架级重试（虽然默认就是关的，这里显式声明是为了防止将来有人打开）：
+        # 它在监听器内部循环重试、不产生新消息，与手动 ACK 配合时
+        # 「重试到第几次」和「最终 ack 还是 nack」的对应关系不直观。
+        # 我们的重试改为显式投递到延迟队列 —— 每次重试都是 RabbitMQ 里一条真实的消息，
+        # 管理台能看见、能在排查时数清到底重试了几次
+        retry:
+          enabled: false
 
   cloud:
     nacos:
@@ -93,6 +100,16 @@ huashui:
     allowed-extensions: jpg,jpeg,png,gif,webp
     # 5MB
     max-size: 5242880
+
+  mq:
+    # RabbitMQ 管理插件（management）的 HTTP API，用于查看死信队列里的消息内容。
+    # 容器内 15672，宿主机映射为 15673，见 docker/docker-compose.yml
+    management-url: http://127.0.0.1:15673
+    username: huashui
+    password: ${HUASHUI_MQ_PASSWORD:huashui@123}
+    vhost: /
+    dead-letter-fetch-size: 50
+    dead-letter-replay-limit: 10
 
 knife4j:
   enable: true

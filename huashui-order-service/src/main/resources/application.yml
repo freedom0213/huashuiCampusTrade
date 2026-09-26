@@ -29,6 +29,14 @@ spring:
     username: huashui
     password: ${HUASHUI_MQ_PASSWORD:huashui@123}
     virtual-host: /
+    # 发送方确认：Broker 收到消息后异步回调告知成功与否
+    # correlated 表示回调里能拿到 CorrelationData（我们把 msgId 放在那里，用于定位本地消息记录）
+    publisher-confirm-type: correlated
+    # 开启「路由失败退回」。必须配合下面的 mandatory=true 才生效：
+    # 否则 Broker 会直接丢弃不可路由的消息（交换机和路由键写错时悄无声息）
+    publisher-returns: true
+    template:
+      mandatory: true
     # 本服务只是生产方，不消费消息，因此不需要配置 listener
 
   cloud:
@@ -75,6 +83,14 @@ huashui:
     timeout-task-enabled: true
     timeout-batch-size: 200
     timeout-task-interval-ms: 60000
+
+    # ========== 本地消息表（消息可靠性）==========
+    # 最大补发次数，超过则置为「失败待人工处理」，不再自动重试
+    local-message-max-retry: 5
+    # 补发任务开关：阶段 10 接入 XXL-JOB 后改成 false 即可停用本地任务
+    local-message-task-enabled: true
+    local-message-batch-size: 100
+    local-message-task-interval-ms: 30000
 
 knife4j:
   enable: true
