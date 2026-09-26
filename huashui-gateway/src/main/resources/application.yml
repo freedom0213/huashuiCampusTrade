@@ -1,0 +1,87 @@
+# ============================================================
+# 网关配置
+# 端口 6001（避开本机其他项目常用的 80xx 段）
+# ============================================================
+server:
+  port: 6001
+
+spring:
+  application:
+    name: huashui-gateway
+
+  cloud:
+    nacos:
+      discovery:
+        # Nacos 宿主机端口是 18848（容器内 8848）
+        # 客户端会自动按「端口 + 1000」连接 gRPC 的 19848，compose 里已一并映射
+        server-addr: 127.0.0.1:18848
+        namespace: public
+
+    gateway:
+      discovery:
+        locator:
+          # 关闭「按服务名自动生成路由」，路由一律在下面显式声明。
+          # 自动路由会把所有服务及其内部接口一并暴露出去，不可控。
+          enabled: false
+          lower-case-service-id: true
+
+      # 全局跨域配置 —— 整个平台只在这里配一次，各服务一律不配
+      # 使用 JWT 放在请求头里传递，不依赖 Cookie，因此 allow-credentials 可以关掉，
+      # 从而允许使用 "*" 通配来源（规范禁止 "*" 与 credentials 同时出现）
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          '[/**]':
+            allowed-origin-patterns: "*"
+            allowed-methods: "*"
+            allowed-headers: "*"
+            exposed-headers: "*"
+            allow-credentials: false
+            max-age: 3600
+
+      routes:
+        # StripPrefix=1 会去掉路径中的 /api，下游服务里接口直接映射成 /user/**、/product/**
+        - id: user-service
+          uri: lb://huashui-user-service
+          predicates:
+            - Path=/api/user/**
+          filters:
+            - StripPrefix=1
+
+        - id: product-service
+          uri: lb://huashui-product-service
+          predicates:
+            - Path=/api/product/**
+          filters:
+            - StripPrefix=1
+
+        - id: order-service
+          uri: lb://huashui-order-service
+          predicates:
+            - Path=/api/order/**
+          filters:
+            - StripPrefix=1
+
+# ============================================================
+# 业务配置
+# ============================================================
+huashui:
+  jwt:
+    # 本地开发默认密钥（长度必须 ≥ 32 字节，HS256 的硬性要求）
+    # 生产环境必须通过环境变量 HUASHUI_JWT_SECRET 覆盖，不要使用这里的默认值
+    secret: ${HUASHUI_JWT_SECRET:huashui-campus-trade-dev-jwt-secret-2026}
+    ttl-minutes: 120
+
+  gateway:
+    # 免登录白名单，支持 Ant 风格通配符
+    # 改为配置项而不是写死在代码里：新增免登录接口时不用改代码、不用重新打包
+    white-list:
+      - /api/user/login
+      - /api/user/register
+      - /api/product/list
+      - /api/product/detail/**
+      - /api/product/category/**
+
+logging:
+  level:
+    cn.freedom.huashui: debug

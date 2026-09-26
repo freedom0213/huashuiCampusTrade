@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>cn.freedom.huashui</groupId>
+        <artifactId>huashuiCampusTrade</artifactId>
+        <version>1.0.0</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>huashui-gateway</artifactId>
+    <packaging>jar</packaging>
+
+    <name>huashui-gateway</name>
+    <description>统一入口：路由、JWT 校验、CORS、身份透传</description>
+
+    <dependencies>
+        <!--
+          Spring Cloud Gateway 基于 WebFlux（响应式）。
+          这里【绝对不能】出现 spring-boot-starter-web ——
+          同时存在 Servlet 与 Reactive 两套 Web 栈时，Spring Boot 会判定为 Servlet 应用，
+          网关将无法启动。huashui-common 中的 starter-web 已标记 optional，因此不会传递进来。
+        -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-gateway</artifactId>
+        </dependency>
+
+        <!-- 服务发现：从 Nacos 拉取服务实例列表 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+
+        <!-- 负载均衡：路由使用 lb:// 协议时必须要有它，否则解析不了服务名 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+
+        <!-- 公共模块：Result / ResultCode / JwtUtil / AuthConstants -->
+        <dependency>
+            <groupId>cn.freedom.huashui</groupId>
+            <artifactId>huashui-common</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>${project.artifactId}</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

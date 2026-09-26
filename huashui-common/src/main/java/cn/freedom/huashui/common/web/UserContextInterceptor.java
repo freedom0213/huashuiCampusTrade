@@ -1,5 +1,6 @@
 package cn.freedom.huashui.common.web;
 
+import cn.freedom.huashui.common.constant.AuthConstants;
 import cn.freedom.huashui.common.context.UserContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -15,28 +16,28 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * <p><b>安全前提</b>：下游服务必须只在内网暴露、不能直接对外，
  * 否则任何人都能伪造这两个请求头绕过鉴权。生产部署时通过 Docker 内部网络 + 只暴露网关来解决。
  *
+ * <p>请求头常量定义在 {@link AuthConstants}，因为网关（WebFlux）也需要用到，
+ * 而那里不能引用本类。
+ *
  * @author freedom0213
  */
 @Slf4j
 public class UserContextInterceptor implements HandlerInterceptor {
 
-    public static final String HEADER_USER_ID = "X-User-Id";
-    public static final String HEADER_USER_ROLE = "X-User-Role";
-
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
-        String userId = request.getHeader(HEADER_USER_ID);
+        String userId = request.getHeader(AuthConstants.HEADER_USER_ID);
         if (userId == null || userId.isBlank()) {
             // 游客请求，不设置上下文，由具体接口自行决定是否需要登录
             return true;
         }
         try {
-            String role = request.getHeader(HEADER_USER_ROLE);
+            String role = request.getHeader(AuthConstants.HEADER_USER_ROLE);
             UserContext.set(Long.valueOf(userId),
                     (role == null || role.isBlank()) ? null : Integer.valueOf(role));
         } catch (NumberFormatException e) {
             log.warn("请求头中的用户信息格式非法 | X-User-Id={} | X-User-Role={}",
-                    userId, request.getHeader(HEADER_USER_ROLE));
+                    userId, request.getHeader(AuthConstants.HEADER_USER_ROLE));
         }
         return true;
     }

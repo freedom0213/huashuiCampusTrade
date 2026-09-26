@@ -23,6 +23,7 @@
     <!-- 子模块按开发阶段逐个加入，不一次性铺开 -->
     <modules>
         <module>huashui-common</module>
+        <module>huashui-gateway</module>
     </modules>
 
     <properties>

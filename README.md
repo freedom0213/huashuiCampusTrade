@@ -169,7 +169,7 @@ cp huashui-user-service/src/main/resources/application-local.yml.example \
    huashui-user-service/src/main/resources/application-local.yml
 ```
 
-（该文件在阶段 3 引入 gateway 时创建）
+（该文件在阶段 4 引入 user-service 时创建，用于放置数据库密码）
 
 **4. 启动服务**
 
@@ -180,7 +180,7 @@ cp huashui-user-service/src/main/resources/application-local.yml.example \
 - [x] 总体设计 V1
 - [x] 阶段 1：Maven 父工程 + `huashui-common`
 - [x] 阶段 2：基础设施 + 建库建表
-- [ ] 阶段 3：gateway
+- [x] 阶段 3：gateway
 - [ ] 阶段 4：user-service
 - [ ] 阶段 5：product-service
 - [ ] 阶段 6：前端最小闭环
