@@ -85,6 +85,30 @@
       .who b { color: #ec6e9c; }
       .tip { margin: 8px 0 0; font-size: 11px; color: #7d7d86; line-height: 1.65; }
 
+      /* 测试账号：点一下自动填进上面的登录表单 */
+      .acc {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        width: 100%;
+        padding: 8px 10px;
+        margin-bottom: 6px;
+        border-radius: 9px;
+        border: 1px solid #34343d;
+        background: #17171c;
+        text-align: left;
+        cursor: pointer;
+      }
+      .acc:hover { border-color: #ec6e9c; }
+      .acc b { font-size: 12px; font-weight: 600; color: #f5a2c2; }
+      .acc i { font-size: 10.5px; font-style: normal; color: #7d7d86; }
+      .acc code {
+        margin-left: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px;
+        color: #b9b9c0;
+      }
+
       /* 手机框 */
       .stage { display: flex; flex-direction: column; align-items: center; gap: 12px; }
       .phone {
@@ -177,6 +201,15 @@
             <button id="doConnect">连接</button>
           </div>
         </div>
+      </div>
+
+      <div class="box">
+        <h2>测试账号</h2>
+        <div id="accList"></div>
+        <p class="tip">
+          点一下即可填入上方表单，再点「登录并刷新」。<br />
+          来源：本机 <code>huashui_user.t_user</code> 表中<b>已实测可登录</b>的账号。
+        </p>
       </div>
 
       <div class="box">
@@ -453,6 +486,30 @@
       document.getElementById('doOpenReal').onclick = () => {
         window.open(TARGET + '/preview.html', '_blank')
       }
+
+      /* ── 测试账号 ──
+         🔴 只列「实测可登录」的账号：密码是 BCrypt 哈希（不可逆），
+            所以这里不是从库里读出来的，而是拿候选密码逐个校验哈希确认过的。
+            本机 t_user 表里另有 freedom0213（用户自己的账号），
+            其密码未验证通过候选表，故不在此列出（不猜、不写错密码）。 */
+      const ACCOUNTS = [
+        { u: 'buyer01', p: 'buyer123456', note: '买家一号' },
+        { u: 'buyer02', p: 'buyer123456', note: '买家二号' }
+      ]
+
+      const accList = document.getElementById('accList')
+      ACCOUNTS.forEach((a) => {
+        const b = document.createElement('button')
+        b.className = 'acc'
+        b.title = '点击填入用户名与密码'
+        b.innerHTML = `<b>${a.u}</b><i>${a.note}</i><code>${a.p}</code>`
+        b.onclick = () => {
+          document.getElementById('u').value = a.u
+          document.getElementById('p').value = a.p
+          document.getElementById('doLogin').focus()
+        }
+        accList.appendChild(b)
+      })
 
       /* ── 路由按钮 ── */
       const routesEl = document.getElementById('routes')
