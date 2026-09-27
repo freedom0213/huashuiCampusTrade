@@ -172,7 +172,8 @@ async function run(act, p) {
     return
   }
   if (act === 'orders') {
-    router.push('/user/orders')
+    // 卖家视角：这些是自己发布的商品，订单里的角色一定是卖家
+    router.push({ path: '/user/orders', query: { role: 'seller' } })
     return
   }
   if (act === 'del') {

@@ -58,6 +58,21 @@ export const ORDER_STATUS_STYLE = {
   3: 'dead'
 }
 
+/**
+ * 订单状态的**展示文案**（我的订单列表 / 订单详情共用）。
+ *
+ * 🔴 与后端 `OrderStatus.desc` 的差异：后端 status=1 的 desc 是「已付款」，
+ *    本表写成「已付款，待收货」。多出来的半句是**下一步该干什么**——
+ *    只写「已付款」，买家不知道后面还有「确认收货」这个动作。
+ *    这是设计稿 §5.2 的口径，故在此覆盖后端文案（同「我的发布」对 status=2 的处理）。
+ */
+export const ORDER_STATUS_LABEL = {
+  0: '待付款',
+  1: '已付款，待收货',
+  2: '交易完成',
+  3: '已取消'
+}
+
 /* ---------------- 成色 ----------------
    🔴 数值越小越新；筛选「≥ 某档」在后端换算成 condition_level <= code */
 export const CONDITION_OPTIONS = [

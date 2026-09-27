@@ -106,24 +106,32 @@ const routes = [
   {
     path: '/user/orders',
     name: 'myOrders',
-    component: Placeholder,
+    // 块 5-A 已实现
+    component: () => import('@/views/MyOrdersView.vue'),
     meta: {
       title: '我的订单',
       auth: true,
-      block: 5,
-      apis: ['GET /api/order/mine?role=buyer|seller', 'PUT /api/order/{orderNo}/pay', 'PUT /api/order/{orderNo}/cancel']
+      apis: [
+        'GET /api/order/mine?role=buyer|seller',
+        'GET /api/user/detail/{peerId}（补对端昵称，OrderVO 不含）',
+        'PUT /api/order/{orderNo}/pay',
+        'PUT /api/order/{orderNo}/complete',
+        'PUT /api/order/{orderNo}/cancel'
+      ]
     }
   },
   {
     path: '/order/:orderNo',
     name: 'orderDetail',
-    component: Placeholder,
+    // 块 5-B 已实现
+    component: () => import('@/views/OrderDetailView.vue'),
     meta: {
       title: '订单详情',
       auth: true,
-      block: 5,
       apis: [
         'GET /api/order/detail/{orderNo}',
+        'GET /api/user/detail/{peerId}',
+        'GET /api/user/{peerId}/contact',
         'PUT /api/order/{orderNo}/pay',
         'PUT /api/order/{orderNo}/complete',
         'PUT /api/order/{orderNo}/cancel'
