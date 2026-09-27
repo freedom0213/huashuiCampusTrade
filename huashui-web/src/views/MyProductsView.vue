@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import ActionSheet from '@/components/ActionSheet.vue'
-import { listMyProducts, getProductDetail, offShelf, onShelf, deleteProduct } from '@/api/product'
+import { listMyProducts, offShelf, onShelf, deleteProduct } from '@/api/product'
 import { formatPrice } from '@/utils/format'
 import { toastFromError, toastOk } from '@/composables/useToast'
 import { CONDITION_DESC } from '@/constants/enums'
@@ -92,7 +92,6 @@ async function load(reset) {
     finished.value = items.value.length >= total.value || records.length === 0
     loaded.value = true
     if (!finished.value) page.value += 1
-    fillRejectReasons(records)
   } catch (e) {
     if (reset || !items.value.length) error.value = e.message || '加载失败'
     else finished.value = true
@@ -111,27 +110,12 @@ function loadMore() {
   load(false)
 }
 
-/**
- * 🔴 接口缺口绕过：`ProductListVO` **没有 `rejectReason` 字段**（只有 ProductDetailVO 有），
- * 而设计稿要求「驳回原因直接写在卡片上」。
- * 前端会话不改后端，所以这里对**已驳回**的商品补一次详情请求把原因取回来。
- * 代价：N 次额外请求 —— 但已驳回的商品通常只有一两个，可接受。
- * 建议后端后续在 ProductListVO 补上该字段（一行），这边就能删掉这段。
- */
-async function fillRejectReasons(records) {
-  const targets = records.filter((p) => p.status === 5 && !p.rejectReason)
-  if (!targets.length) return
-  await Promise.all(
-    targets.map(async (p) => {
-      try {
-        const d = await getProductDetail(p.id)
-        p.rejectReason = d?.rejectReason || ''
-      } catch {
-        /* 取不到原因不影响列表本身，只是少显示一行 */
-      }
-    })
-  )
-}
+/* 🔴 `rejectReason` 只有 `GET /api/product/mine` 会返回（后端 2026-09-27 `ad961bc` 补的字段）。
+   公共商品列表与**收藏列表一律返回 null**，这是有意的：驳回原因是卖家的私事 ——
+   收藏列表会保留已下架/已售出的商品，收藏过它的买家也会看到，
+   无条件返回等于把「卖家为什么被驳回」告诉买家。
+   → 所以**这一行只在「我的发布」渲染**，其它场景按 null 处理（本页就是唯一的出口）。
+   此前那段「对每张已驳回卡片再查一次详情取原因」的绕行代码已随该字段上线删除。 */
 
 onMounted(() => load(true))
 
@@ -286,6 +270,7 @@ function back() {
                 {{ p.conditionDesc || CONDITION_DESC[p.conditionLevel] || '' }}
                 <span v-if="p.tradePlace"> · {{ p.tradePlace }}</span>
               </p>
+              <!-- rejectReason 只在 /api/product/mine 有值（卖家私事，公共/收藏列表为 null） -->
               <p v-if="p.status === 5 && p.rejectReason" class="reject">
                 驳回原因：{{ p.rejectReason }}
               </p>

@@ -18,10 +18,10 @@ import { useCountdown } from '@/composables/useCountdown'
      我买到的 role=buyer  → 展示**卖家**信息（要去赴约的是买家）
      我卖出的 role=seller → 展示**买家**信息（要联系买家的是卖家）
 
-   🔴 OrderVO **不做跨服务聚合**（后端注释明确）：只有 buyerId / sellerId，没有对端昵称。
-      所以对端昵称要前端并行调 `GET /api/user/detail/{id}` 补 —— 与「我的发布」
-      补 rejectReason 是同一类做法。按 id 去重后请求，且结果缓存在 peers 里，
-      翻页 / 切视角都不重复请求。
+   🔴 OrderVO **不做跨服务聚合**（后端注释明确）：只有 buyerId / sellerId，没有对端昵称，
+      也没有对端手机号。所以昵称要前端并行调 `GET /api/user/detail/{id}` 补。
+      按 id 去重后请求，且结果缓存在 peers 里，翻页 / 切视角都不重复请求。
+      （手机号**不在列表露出**，只在订单详情里显示 —— 它是全站唯一出口，不该出现在列表流里。）
 
    🔴 状态文案用本页映射（ORDER_STATUS_LABEL），不用后端 statusDesc：
       后端 status=1 的文案是「已付款」，而产品口径要「已付款，待收货」——
