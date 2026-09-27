@@ -66,25 +66,37 @@ const routes = [
   {
     path: '/publish',
     name: 'publish',
-    component: Placeholder,
+    // 块 4-A 已实现
+    component: () => import('@/views/PublishView.vue'),
     meta: {
       title: '发布商品',
-      tab: 'publish',
+      // 🔴 刻意**不设 tab**：设计文档 §2.2 明确「发布」是不进底栏的二级页
+      // （顶部自带「取消」，底部是自己的提交栏）。底栏的「发布」按钮仍作为入口跳到这里。
       auth: true,
-      block: 4,
-      apis: ['GET /api/category/list', 'POST /api/file/upload', 'POST /api/product', 'PUT /api/product/{id}']
+      apis: ['GET /api/category/list', 'POST /api/file/upload', 'POST /api/product']
+    }
+  },
+  {
+    path: '/publish/:id',
+    name: 'publishEdit',
+    // 块 4-A 已实现：与发布页复用同一组件，靠 :id 区分编辑态
+    component: () => import('@/views/PublishView.vue'),
+    meta: {
+      title: '编辑商品',
+      auth: true,
+      apis: ['GET /api/product/detail/{id}', 'PUT /api/product/{id}', 'POST /api/file/upload']
     }
   },
   {
     path: '/user/products',
     name: 'myProducts',
-    component: Placeholder,
+    // 块 4-B 已实现
+    component: () => import('@/views/MyProductsView.vue'),
     meta: {
       title: '我的发布',
       auth: true,
-      block: 4,
       apis: [
-        'GET /api/product/mine?status=',
+        'GET /api/product/mine',
         'PUT /api/product/{id}/off-shelf',
         'PUT /api/product/{id}/on-shelf',
         'DELETE /api/product/{id}'
