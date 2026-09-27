@@ -98,6 +98,60 @@
       }
       .phone iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
       .stage .meta { font-size: 11.5px; color: #7d7d86; }
+
+      /* 连接失败时的兜底提示（覆盖在手机屏上）。
+         🔴 存在的意义：以前 vite 没启动时手机屏就是**一片空白**，
+            看不出是「没启动」还是「页面坏了」。失败必须给出原因与下一步动作。 */
+      .fallback {
+        position: absolute;
+        inset: 0;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 28px 24px;
+        background: #fff;
+      }
+      .fallback[hidden] { display: none; }
+      .fb-card { text-align: center; }
+      .fb-icon {
+        width: 52px;
+        height: 52px;
+        margin: 0 auto 16px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #fff4f8;
+        color: #ec6e9c;
+      }
+      .fb-card h3 {
+        margin: 0 0 10px;
+        font-size: 15px;
+        font-weight: 600;
+        color: #1c1c1e;
+        letter-spacing: -0.2px;
+      }
+      .fb-card p {
+        margin: 0 0 14px;
+        font-size: 12px;
+        line-height: 1.7;
+        color: #8e8e93;
+        text-align: left;
+      }
+      .fb-cmd {
+        padding: 11px 13px;
+        border-radius: 10px;
+        background: #f6f6f8;
+        color: #3a3a3c;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11.5px;
+        line-height: 1.8;
+        text-align: left;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      .fb-card button { margin-top: 16px; width: 100%; }
     </style>
   </head>
   <body>
@@ -145,7 +199,21 @@
 
     <div class="stage">
       <div class="phone" id="phone">
-        <iframe id="f" src="/"></iframe>
+        <iframe id="f" src="about:blank"></iframe>
+        <div class="fallback" id="fallback" hidden>
+          <div class="fb-card">
+            <div class="fb-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3.6v8.2M12 16.4h.02" />
+                <circle cx="12" cy="12" r="8.8" />
+              </svg>
+            </div>
+            <h3 id="fbTitle">预览台没连上开发服务器</h3>
+            <p id="fbDesc"></p>
+            <div class="fb-cmd" id="fbCmd"></div>
+            <button class="primary" id="fbRetry">重新连接</button>
+          </div>
+        </div>
       </div>
       <p class="meta" id="meta">375 × 812</p>
     </div>
@@ -181,6 +249,86 @@
 
       let current = '/'
 
+      /* ══════════ 失败诊断：手机屏内不再是一片空白 ══════════
+         空白是最坏的失败模式 —— 看不出是「服务没启动」还是「页面写坏了」。
+         所以这里把三种真实原因分别识别出来，并给出下一步动作：
+           ① file:// 直接打开本地文件（脚本被同源策略拦截）
+           ② Vite 开发服务器没在跑（5173 无响应）
+           ③ 服务器在跑但前端应用没挂载出来（8 秒兜底检查）        */
+      const fallbackEl = document.getElementById('fallback')
+      const fbTitle = document.getElementById('fbTitle')
+      const fbDesc = document.getElementById('fbDesc')
+      const fbCmd = document.getElementById('fbCmd')
+      let frameTimer = null
+
+      function showFallback(title, desc, cmd) {
+        clearTimeout(frameTimer)
+        fbTitle.textContent = title
+        fbDesc.textContent = desc
+        fbCmd.textContent = cmd || ''
+        fbCmd.style.display = cmd ? 'block' : 'none'
+        fallbackEl.hidden = false
+      }
+
+      function hideFallback() {
+        fallbackEl.hidden = true
+      }
+
+      /** 加载页面到手机屏，并挂一个兜底检查：
+          8 秒后 iframe 里仍然没有挂载出内容，就说明前端应用没起来 */
+      function loadFrame(path) {
+        hideFallback()
+        clearTimeout(frameTimer)
+        f.src = path
+        frameTimer = setTimeout(() => {
+          try {
+            const app = f.contentDocument?.getElementById('app')
+            if (app && !app.children.length) {
+              showFallback(
+                '前端应用没有渲染出来',
+                '开发服务器响应正常，但页面没能挂载。请在浏览器控制台（F12）查看报错，常见原因是依赖缺失或代码编译错误。',
+                ''
+              )
+            }
+          } catch {
+            /* 读不到 iframe 文档说明是跨源，跳过检查 */
+          }
+        }, 8000)
+      }
+
+      /** 启动自检：先在手机屏上给出结论，再决定是否加载页面 */
+      async function boot() {
+        // ① 用 file:// 直接双击打开的本地文件
+        if (location.protocol === 'file:') {
+          return showFallback(
+            '这个页面不能直接双击打开',
+            '你现在是用 file:// 协议打开本地文件：页内脚本会被浏览器的同源策略拦掉，手机屏里必然是空的。请通过开发服务器访问：',
+            'http://127.0.0.1:5173/preview.html'
+          )
+        }
+
+        // ② Vite 开发服务器是否存活
+        let alive = false
+        try {
+          const res = await fetch('/index.html', { cache: 'no-store' })
+          alive = res.ok
+        } catch {
+          alive = false
+        }
+        if (!alive) {
+          return showFallback(
+            '预览台没连上开发服务器',
+            'Vite 开发服务器没有响应，手机屏里没有任何内容可渲染。请在 huashui-web 目录启动它，然后点「重新连接」：',
+            'cd huashui-web\nnpm run dev'
+          )
+        }
+
+        // 探活通过：交给 open() 加载并高亮对应路由按钮
+        open(current)
+      }
+
+      document.getElementById('fbRetry').onclick = () => boot()
+
       /* ── 路由按钮 ── */
       const routesEl = document.getElementById('routes')
       ROUTES.forEach((r) => {
@@ -209,7 +357,7 @@
 
       function open(path) {
         current = path
-        f.src = path
+        loadFrame(path)
         ;[...routesEl.children].forEach((b) =>
           b.classList.toggle('on', b.dataset.path === path)
         )
@@ -223,8 +371,8 @@
         if (e.key === 'Enter') document.getElementById('openCustom').click()
       })
       document.getElementById('doReload').onclick = () => {
-        f.src = 'about:blank'
-        setTimeout(() => (f.src = current), 30)
+        loadFrame('about:blank')
+        setTimeout(() => loadFrame(current), 30)
       }
 
       /* ── 登录态：token 与本页同源共享，所以直接写 localStorage ── */
@@ -281,7 +429,7 @@
       }
 
       refreshAuthUI()
-      open('/')
+      boot()
     </script>
   </body>
 </html>

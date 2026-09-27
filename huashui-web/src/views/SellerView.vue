@@ -1,11 +1,12 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ProductCard from '@/components/ProductCard.vue'
 import PageState from '@/components/PageState.vue'
 import { getUserBrief } from '@/api/user'
 import { getSoldCount } from '@/api/order'
 import { useProductList } from '@/composables/useProductList'
+import { captureCard, consumeReturn, restoreScroll } from '@/utils/flip'
 
 /* 卖家主页 —— 二手交易的信任建立在它上面：
    「已成交 N 笔」是核心信任信号，数据来自 order-service 的 sold-count（口径：已付款 + 交易完成，已取消不计）。
@@ -23,12 +24,19 @@ const profileError = ref('')
 
 const list = useProductList({ sellerId: sellerId.value, size: 50 })
 
+/* 滚动容器 + 「从详情页返回」的还原标记（见 utils/flip.js） */
+const scrollerEl = ref(null)
+const restoring = ref(false)
+
 const nickname = computed(() => seller.value?.nickname || seller.value?.username || '卖家')
 const dept = computed(() => seller.value?.dept || '')
 const avatar = computed(() => seller.value?.avatar || '')
 
 onMounted(async () => {
-  list.load(true)
+  restoring.value = consumeReturn()
+  await list.load(true)
+  await nextTick()
+  restoreScroll(scrollerEl.value)
   // 资料与成交数互不依赖，并行拿；任一失败只影响对应的那块信息，不让整页失败
   const [brief, sold] = await Promise.allSettled([
     getUserBrief(sellerId.value),
@@ -39,7 +47,9 @@ onMounted(async () => {
   if (sold.status === 'fulfilled') soldCount.value = sold.value
 })
 
-function open(product) {
+function open(product, ev) {
+  // 记录卡片位置，供详情页播放「卡片放大成详情」的 FLIP 动画
+  captureCard(ev?.currentTarget, product.id, scrollerEl.value)
   router.push(`/product/${product.id}`)
 }
 function back() {
@@ -83,7 +93,7 @@ function back() {
       </div>
     </div>
 
-    <div class="page-scroll" @scroll="list.onScroll">
+    <div ref="scrollerEl" class="page-scroll" :class="{ restoring }" @scroll="list.onScroll">
       <div class="pad">
         <p v-if="profileError" class="warn">{{ profileError }}</p>
 
@@ -182,5 +192,10 @@ function back() {
   padding: 12px 0 0;
   font-size: var(--fs-1);
   color: var(--orange);
+}
+
+/* 从详情页缩回时，卡片不再播一次入场动画（否则两者会叠加成"抖一下"） */
+.page-scroll.restoring :deep(.pcard) {
+  animation: none;
 }
 </style>

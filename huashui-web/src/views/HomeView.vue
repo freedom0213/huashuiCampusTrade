@@ -1,11 +1,12 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import ProductCard from '@/components/ProductCard.vue'
 import PageState from '@/components/PageState.vue'
 import { listCategories } from '@/api/category'
 import { useProductList } from '@/composables/useProductList'
 import { useNotice } from '@/composables/useNotice'
+import { captureCard, consumeReturn, restoreScroll } from '@/utils/flip'
 
 /* 首页 = 推荐位，只有「热门推荐 + 最新发布」两个固定分区。
    分类胶囊与「查看全部」一律跳 /search，**不在首页原地切换**——
@@ -21,11 +22,19 @@ const { hasNotice, checkNotice } = useNotice()
 const hot = useProductList({ sort: 'views', size: 6 })
 const latest = useProductList({ sort: 'newest', size: 20 })
 
-onMounted(() => {
-  hot.load(true)
-  latest.load(true)
+/* 从详情页返回时：还原滚动位置 + 不重播卡片入场动画
+   （卡片本来就在屏幕上，再"入场"一次会和缩回动画撞在一起） */
+const scrollerEl = ref(null)
+const restoring = ref(false)
+
+onMounted(async () => {
+  restoring.value = consumeReturn()
   checkNotice()
   loadCategories()
+  hot.load(true)
+  await latest.load(true)
+  await nextTick()
+  restoreScroll(scrollerEl.value)
 })
 
 async function loadCategories() {
@@ -37,7 +46,9 @@ async function loadCategories() {
   }
 }
 
-function open(product) {
+function open(product, ev) {
+  // 记录卡片位置，供详情页播放「卡片放大成详情」的 FLIP 动画
+  captureCard(ev?.currentTarget, product.id, scrollerEl.value)
   router.push(`/product/${product.id}`)
 }
 function goSearch(query = {}) {
@@ -47,7 +58,7 @@ function goSearch(query = {}) {
 
 <template>
   <div class="page">
-    <div class="page-scroll safe-top" @scroll="latest.onScroll">
+    <div ref="scrollerEl" class="page-scroll safe-top" :class="{ restoring }" @scroll="latest.onScroll">
       <!-- 顶部：学校 + 通知入口（两层，不要再加第三层） -->
       <div class="home-top">
         <span class="campus">
@@ -146,6 +157,11 @@ function goSearch(query = {}) {
 <style scoped>
 .safe-top {
   padding-top: var(--safe-top);
+}
+
+/* 从详情页缩回时，卡片不再播一次入场动画（否则两者会叠加成"抖一下"） */
+.page-scroll.restoring :deep(.pcard) {
+  animation: none;
 }
 
 .home-top {

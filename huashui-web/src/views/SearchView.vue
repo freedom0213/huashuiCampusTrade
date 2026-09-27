@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ProductCard from '@/components/ProductCard.vue'
 import PageState from '@/components/PageState.vue'
@@ -7,6 +7,7 @@ import OptionSheet from '@/components/OptionSheet.vue'
 import { listCategories } from '@/api/category'
 import { useProductList } from '@/composables/useProductList'
 import { CAMPUS_LIST, CONDITION_FILTER_OPTIONS, SORT_OPTIONS } from '@/constants/enums'
+import { captureCard, consumeReturn, restoreScroll } from '@/utils/flip'
 
 /* 商品列表 / 搜索结果 —— 全站唯一的「筛选与排序」落点。
    首页的分类胶囊与「查看全部」都跳到这里，所以这套逻辑只需实现一次。
@@ -37,6 +38,10 @@ const list = useProductList(buildParams())
 
 const sheet = ref('')
 
+/* 滚动容器 + 「从详情页返回」的还原标记（见 utils/flip.js） */
+const scrollerEl = ref(null)
+const restoring = ref(false)
+
 const title = computed(() => {
   if (kw.value) return kw.value
   const c = categories.value.find((x) => String(x.id) === categoryId.value)
@@ -61,7 +66,7 @@ function buildParams() {
   return p
 }
 
-/** 条件变了：同步 URL（replace 避免刷历史）→ 重新请求 */
+/** 条件变了：同步 URL（replace 避免刷历史）→ 回到列表顶部 → 重新请求 */
 function apply() {
   const p = buildParams()
   const query = {}
@@ -69,6 +74,8 @@ function apply() {
     if (k !== 'size') query[k] = p[k]
   })
   router.replace({ path: '/search', query })
+  // 筛选条件变了就是一批新结果，停在原来的滚动深度没有意义
+  if (scrollerEl.value) scrollerEl.value.scrollTop = 0
   list.setParams(p)
 }
 
@@ -77,7 +84,10 @@ function search() {
 }
 
 onMounted(async () => {
-  list.load(true)
+  restoring.value = consumeReturn()
+  await list.load(true)
+  await nextTick()
+  restoreScroll(scrollerEl.value)
   try {
     categories.value = (await listCategories()) || []
   } catch {
@@ -85,7 +95,9 @@ onMounted(async () => {
   }
 })
 
-function open(product) {
+function open(product, ev) {
+  // 记录卡片位置，供详情页播放「卡片放大成详情」的 FLIP 动画
+  captureCard(ev?.currentTarget, product.id, scrollerEl.value)
   router.push(`/product/${product.id}`)
 }
 function back() {
@@ -131,7 +143,7 @@ function back() {
       </button>
     </div>
 
-    <div class="page-scroll" @scroll="list.onScroll">
+    <div ref="scrollerEl" class="page-scroll" :class="{ restoring }" @scroll="list.onScroll">
       <p v-if="list.loaded.value && !list.error.value" class="resultbar">
         {{ list.total.value > 0 ? `找到 ${list.total.value} 件商品` : '没有找到相关商品' }}
       </p>
@@ -270,5 +282,10 @@ function back() {
 }
 .pad {
   padding: 12px 16px 20px;
+}
+
+/* 从详情页缩回时，卡片不再播一次入场动画（否则两者会叠加成"抖一下"） */
+.page-scroll.restoring :deep(.pcard) {
+  animation: none;
 }
 </style>

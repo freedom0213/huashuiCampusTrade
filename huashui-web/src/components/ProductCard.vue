@@ -18,8 +18,9 @@ const props = defineProps({
   showState: { type: Boolean, default: false }
 })
 
+/* tap 事件把原生 event 一并抛出：块 3-B 的「卡片 ⇄ 详情」FLIP 转场需要父级
+   拿到被点击卡片的 DOM 引用去测量缩略图位置（见 utils/flip.js 的 captureCard）。 */
 defineEmits(['tap'])
-
 const tone = computed(() => `t${(props.index % 4) + 1}`)
 const delay = computed(() => `${((props.index % 6) + 1) * 0.05}s`)
 const cover = computed(() => props.product.coverUrl || '')
@@ -35,7 +36,12 @@ const origin = computed(() =>
 </script>
 
 <template>
-  <article class="pcard press" :style="{ animationDelay: delay }" @click="$emit('tap', product)">
+  <article
+    class="pcard press"
+    :data-pid="product.id"
+    :style="{ animationDelay: delay }"
+    @click="$emit('tap', product, $event)"
+  >
     <div class="thumb" :class="tone">
       <img v-if="cover" :src="cover" :alt="product.title" loading="lazy" />
       <svg v-else class="ph" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">

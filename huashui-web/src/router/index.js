@@ -39,10 +39,10 @@ const routes = [
   {
     path: '/product/:id',
     name: 'productDetail',
-    component: Placeholder,
+    // 块 3-B 已实现
+    component: () => import('@/views/ProductDetailView.vue'),
     meta: {
       title: '商品详情',
-      block: 3,
       apis: [
         'GET /api/product/detail/{id}',
         'GET /api/user/detail/{sellerId}',
