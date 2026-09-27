@@ -163,6 +163,23 @@
       </p>
 
       <div class="box">
+        <h2>开发服务器</h2>
+        <div id="targetOk" style="display: none">
+          <p class="who" id="targetWho"></p>
+          <div class="row">
+            <button id="doOpenReal">在独立标签页打开</button>
+          </div>
+        </div>
+        <div id="targetBad">
+          <p class="tip" id="targetTip">正在探测…</p>
+          <div class="row">
+            <input id="targetInput" placeholder="http://127.0.0.1:5173" />
+            <button id="doConnect">连接</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="box">
         <h2>登录态</h2>
         <div id="loginForm">
           <input id="u" placeholder="用户名（如 buyer01）" autocomplete="username" />
@@ -170,7 +187,7 @@
           <div class="row">
             <button class="primary" id="doLogin">登录并刷新</button>
           </div>
-          <p class="tip">带登录态才能预览「我的 / 订单 / 收藏」这些需登录的页面。</p>
+          <p class="tip" id="loginTip">带登录态才能预览「我的 / 订单 / 收藏」这些需登录的页面。</p>
         </div>
         <div id="loggedIn" style="display: none">
           <p class="who" id="who"></p>
@@ -249,12 +266,88 @@
 
       let current = '/'
 
+      /* ══════════ 开发服务器地址探测 ══════════
+         🔴 为什么必须探测，而不是直接用相对路径：
+            本页可能**不是**由 Vite 提供的。实测踩到过——把 preview.html 交给 WorkBuddy
+            预览面板后，它由内置静态服务（形如 `http://127.0.0.1:59343/static-html/xxx/preview.html`）
+            打开，此时所有相对路径都指向那个静态服务：`/index.html` 返回 404、iframe 里的 `/`
+            也拿不到应用 → 手机屏报「没连上开发服务器」，而实际上 Vite 一直好好的。
+         做法：不假设「自己就在 Vite 上」，按候选顺序探测，找到哪个可用就用哪个，
+              并把结果记进 localStorage，下次优先复用。 */
+      const TARGET_KEY = 'huashui_preview_target'
+
+      function probeTargets() {
+        const list = []
+        const add = (o) => {
+          o = String(o || '').trim().replace(/\/+$/, '').replace(/\/preview\.html$/i, '')
+          if (o && !list.includes(o)) list.push(o)
+        }
+        // ① URL 显式指定（优先级最高，便于手动纠正）
+        add(new URLSearchParams(location.search).get('target'))
+        // ② 上次探测成功的地址
+        add(localStorage.getItem(TARGET_KEY))
+        // ③ 当前 origin —— 直接从 Vite 打开时就是它，零额外延迟
+        if (location.protocol.startsWith('http')) add(location.origin)
+        // ④ 项目约定端口（vite.config.js server.port = 5173，被占用时 Vite 会顺延）
+        for (const p of [5173, 5174, 5175]) {
+          add(`http://127.0.0.1:${p}`)
+          add(`http://localhost:${p}`)
+        }
+        return list
+      }
+
+      /** 探测某地址上是不是 Vite 开发服务器。
+          🔴 判据必须严格，踩过坑：最初写成「有响应就算可达」，结果把 WorkBuddy 的静态服务、
+             甚至 python -m http.server 都误判成了 Vite（它们对 /@vite/client 返回 404
+             但连接是通的）→ 手机屏报「应用没渲染出来」，而真正的 Vite 就在旁边好好的。
+          正确判据（两级都过才算）：
+            ① 状态码 200 —— 明确响应了 404 说明那不是 Vite，直接排除，不再退让；
+            ② 响应体里含 `vite` 字样 —— 防别的服务器恰好也返回 200。
+          连接被拒 / CORS 拦截时返回 false（无法确证，交给下一个候选）。 */
+      async function reachable(origin) {
+        try {
+          const r = await fetch(origin + '/@vite/client', { cache: 'no-store' })
+          if (!r.ok) return false
+          const text = await r.text()
+          return /vite/i.test(text)
+        } catch {
+          return false
+        }
+      }
+
+      let TARGET = ''
+      /** 本页是否由别的服务器托管（即 TARGET ≠ 当前 origin）——决定登录是否可用 */
+      let hostedElsewhere = false
+
+      const setTargetTip = (t) => (document.getElementById('targetTip').textContent = t)
+
+      function updateTargetUI() {
+        const okEl = document.getElementById('targetOk')
+        const badEl = document.getElementById('targetBad')
+        if (TARGET) {
+          okEl.style.display = 'block'
+          badEl.style.display = 'none'
+          document.getElementById('targetWho').innerHTML = hostedElsewhere
+            ? `已连到 <b>${TARGET}</b><br /><span style="color:#8e8e93">本页由 ${location.origin} 提供，`
+              + `与开发服务器不同源</span>`
+            : `已连到 <b>${TARGET}</b>（本页同源）`
+        } else {
+          okEl.style.display = 'none'
+          badEl.style.display = 'block'
+          document.getElementById('targetInput').value = 'http://127.0.0.1:5173'
+          setTargetTip('没探测到开发服务器。可手动填地址后点「连接」。')
+        }
+        /* 跨源时登录请求会被浏览器 CORS 拦掉（Vite 的 proxy 响应不带 CORS 头），
+           所以直接禁用并说清原因 —— 比让用户点了「没反应」要好 */
+        document.getElementById('doLogin').disabled = hostedElsewhere
+        document.getElementById('loginTip').textContent = hostedElsewhere
+          ? '⚠️ 本页与开发服务器不同源，登录请求会被浏览器拦截。请先点上方「在独立标签页打开」。'
+          : '带登录态才能预览「我的 / 订单 / 收藏」这些需登录的页面。'
+      }
+
       /* ══════════ 失败诊断：手机屏内不再是一片空白 ══════════
          空白是最坏的失败模式 —— 看不出是「服务没启动」还是「页面写坏了」。
-         所以这里把三种真实原因分别识别出来，并给出下一步动作：
-           ① file:// 直接打开本地文件（脚本被同源策略拦截）
-           ② Vite 开发服务器没在跑（5173 无响应）
-           ③ 服务器在跑但前端应用没挂载出来（8 秒兜底检查）        */
+         所以把每种真实原因分别识别出来，并给出下一步动作。 */
       const fallbackEl = document.getElementById('fallback')
       const fbTitle = document.getElementById('fbTitle')
       const fbDesc = document.getElementById('fbDesc')
@@ -275,11 +368,13 @@
       }
 
       /** 加载页面到手机屏，并挂一个兜底检查：
-          8 秒后 iframe 里仍然没有挂载出内容，就说明前端应用没起来 */
+          8 秒后 iframe 里仍然没有挂载出内容，就说明前端应用没起来
+          （跨源时读不到 contentDocument，try/catch 直接跳过这项检查） */
       function loadFrame(path) {
+        if (!TARGET) return
         hideFallback()
         clearTimeout(frameTimer)
-        f.src = path
+        f.src = TARGET + path
         frameTimer = setTimeout(() => {
           try {
             const app = f.contentDocument?.getElementById('app')
@@ -291,7 +386,7 @@
               )
             }
           } catch {
-            /* 读不到 iframe 文档说明是跨源，跳过检查 */
+            /* 跨源，跳过 */
           }
         }, 8000)
       }
@@ -300,6 +395,7 @@
       async function boot() {
         // ① 用 file:// 直接双击打开的本地文件
         if (location.protocol === 'file:') {
+          updateTargetUI()
           return showFallback(
             '这个页面不能直接双击打开',
             '你现在是用 file:// 协议打开本地文件：页内脚本会被浏览器的同源策略拦掉，手机屏里必然是空的。请通过开发服务器访问：',
@@ -307,27 +403,56 @@
           )
         }
 
-        // ② Vite 开发服务器是否存活
-        let alive = false
-        try {
-          const res = await fetch('/index.html', { cache: 'no-store' })
-          alive = res.ok
-        } catch {
-          alive = false
+        // ② 逐个候选地址探测
+        const candidates = probeTargets()
+        setTargetTip('正在探测开发服务器…')
+        TARGET = ''
+        for (const origin of candidates) {
+          if (await reachable(origin)) {
+            TARGET = origin
+            break
+          }
         }
-        if (!alive) {
+        hostedElsewhere = !!TARGET && TARGET !== location.origin
+        if (TARGET) localStorage.setItem(TARGET_KEY, TARGET)
+        updateTargetUI()
+
+        if (!TARGET) {
           return showFallback(
-            '预览台没连上开发服务器',
-            'Vite 开发服务器没有响应，手机屏里没有任何内容可渲染。请在 huashui-web 目录启动它，然后点「重新连接」：',
-            'cd huashui-web\nnpm run dev'
+            '没找到开发服务器',
+            '已尝试下面这些地址，都没有响应。请在 huashui-web 目录启动 Vite 后点「重新连接」：',
+            'cd huashui-web\nnpm run dev\n\n已尝试：\n' + candidates.join('\n')
           )
         }
 
-        // 探活通过：交给 open() 加载并高亮对应路由按钮
+        // ③ 探测通过：加载页面并高亮对应路由按钮
         open(current)
       }
 
       document.getElementById('fbRetry').onclick = () => boot()
+
+      document.getElementById('doConnect').onclick = async () => {
+        const origin = document.getElementById('targetInput').value
+        const clean = String(origin || '').trim().replace(/\/+$/, '').replace(/\/preview\.html$/i, '')
+        if (!clean) return
+        setTargetTip('正在探测 ' + clean + ' …')
+        if (await reachable(clean)) {
+          TARGET = clean
+          hostedElsewhere = TARGET !== location.origin
+          localStorage.setItem(TARGET_KEY, TARGET)
+          updateTargetUI()
+          open(current)
+        } else {
+          setTargetTip('⚠️ ' + clean + ' 没有响应，请确认 Vite 已启动、端口是否正确。')
+        }
+      }
+      document.getElementById('targetInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') document.getElementById('doConnect').click()
+      })
+
+      document.getElementById('doOpenReal').onclick = () => {
+        window.open(TARGET + '/preview.html', '_blank')
+      }
 
       /* ── 路由按钮 ── */
       const routesEl = document.getElementById('routes')
@@ -371,7 +496,10 @@
         if (e.key === 'Enter') document.getElementById('openCustom').click()
       })
       document.getElementById('doReload').onclick = () => {
-        loadFrame('about:blank')
+        if (!TARGET) return
+        // 直接清 iframe 再重载（不能走 loadFrame，否则会拼成 TARGET + 'about:blank'）
+        clearTimeout(frameTimer)
+        f.src = 'about:blank'
         setTimeout(() => loadFrame(current), 30)
       }
 
@@ -402,7 +530,8 @@
         btn.disabled = true
         btn.textContent = '登录中…'
         try {
-          const res = await fetch('/api/user/login', {
+          // 用探测到的 TARGET 而不是相对路径：本页可能不是由 Vite 提供的
+          const res = await fetch(TARGET + '/api/user/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
