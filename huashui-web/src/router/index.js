@@ -18,16 +18,21 @@ const routes = [
   {
     path: '/',
     name: 'home',
-    component: Placeholder,
-    meta: { title: '首页', tab: 'home', block: 3, apis: ['GET /api/category/list', 'GET /api/product/list'] }
+    // 块 3-A 已实现
+    component: () => import('@/views/HomeView.vue'),
+    meta: {
+      title: '首页',
+      tab: 'home',
+      apis: ['GET /api/category/list', 'GET /api/product/list?sort=views', 'GET /api/product/list?sort=newest']
+    }
   },
   {
     path: '/search',
     name: 'search',
-    component: Placeholder,
+    // 块 3-A 已实现
+    component: () => import('@/views/SearchView.vue'),
     meta: {
       title: '搜索结果',
-      block: 3,
       apis: ['GET /api/product/list (kw / categoryId / campus / conditionLevel / sort)']
     }
   },
@@ -51,10 +56,10 @@ const routes = [
   {
     path: '/seller/:id',
     name: 'seller',
-    component: Placeholder,
+    // 块 3-A 已实现
+    component: () => import('@/views/SellerView.vue'),
     meta: {
       title: '卖家主页',
-      block: 3,
       apis: ['GET /api/user/detail/{id}', 'GET /api/order/sold-count/{id}', 'GET /api/product/list?sellerId=']
     }
   },

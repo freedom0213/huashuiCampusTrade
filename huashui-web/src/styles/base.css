@@ -215,7 +215,9 @@ img {
   font-size: var(--fs-3);
 }
 
-/* 可选中的胶囊（分类、排序、筛选项） */
+/* 可选中的胶囊（分类、排序、筛选项）
+   🔴 选中态用渐变 + 白字（与设计稿 ui-v1.html 的 .chip.on 一致），不是粉底粉字——
+      粉底只用在「筛选芯片」这类次级选中态（见搜索结果页 .fchip.on） */
 .chip {
   display: inline-flex;
   align-items: center;
@@ -223,14 +225,45 @@ img {
   padding: 0 14px;
   border-radius: var(--r-pill);
   background: var(--field);
-  color: #4a4a4c;
-  font-size: var(--fs-2);
+  color: #3a3a3c;
+  font-size: 12.5px;
   white-space: nowrap;
+  cursor: pointer;
 }
 .chip.on {
-  background: var(--pink-bg);
-  color: var(--pink-dp);
+  background: var(--grad-btn);
+  color: #fff;
   font-weight: 500;
+  box-shadow: 0 3px 12px rgba(236, 110, 156, 0.3);
+}
+
+/* 商品栅格 + 分区标题 —— 首页 / 搜索结果 / 卖家主页 共用，避免各页各写一份 */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap-card);
+}
+.sec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 24px 0 12px;
+}
+.sec-head h2 {
+  font-size: var(--fs-3);
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+.sec-head a {
+  font-size: 12.5px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.more {
+  padding: 18px 0 6px;
+  text-align: center;
+  font-size: var(--fs-1);
+  color: var(--text-3);
 }
 
 /* 状态标签：语义色只在这里出现 */

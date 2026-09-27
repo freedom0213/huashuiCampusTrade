@@ -74,6 +74,19 @@ export const CONDITION_DESC = {
   3: '五成新及以下'
 }
 
+/* 成色「筛选」选项 —— 与上面的「发布档位」语义不同，不要混用。
+   🔴 后端语义是「≥ 某档」，实际 SQL 为 `condition_level <= code`（数值越小越新）。
+   所以：
+     code=1 → condition_level <= 1 → 九成新及以上
+     code=3 → condition_level <= 3 → 全部（等于不限）
+   选项文案必须体现「及以上」，否则用户选「九成新」却看到七成新的商品会以为有 bug。 */
+export const CONDITION_FILTER_OPTIONS = [
+  { value: null, label: '不限' },
+  { value: 1, label: '九成新及以上' },
+  { value: 2, label: '七成新及以上' },
+  { value: 0, label: '只要全新' }
+]
+
 /* ---------------- 校区与地标（两级联动） ----------------
    江淮校区在信阳，与郑州两校区不通勤 → 校区筛选有真实业务意义 */
 export const CAMPUS_LIST = ['龙子湖', '花园', '江淮']
@@ -94,11 +107,16 @@ export function buildTradePlace(campus, place) {
 }
 
 /* ---------------- 排序 ----------------
-   ⚠️ 后端只确认了默认值 `newest`，其余取值需在联调时验证后回填 */
+   后端白名单（ProductServiceImpl SORT_* 常量，2026-09-27 读源码核实）：
+     newest（默认）/ price_asc / price_desc / views
+   🔴 两个坑：
+   ① 取值是**下划线风格**，不是 camelCase；
+   ② **非法值不报错**，`applySort` 的 default 分支静默兜底成「按 publish_time 倒序」——
+      写错只会「排序不对」，不会失败。改这里务必对照后端常量。 */
 export const SORT_OPTIONS = [
   { value: 'newest', label: '最新' },
-  { value: 'priceAsc', label: '价格 ↑' },
-  { value: 'priceDesc', label: '价格 ↓' },
+  { value: 'price_asc', label: '价格 ↑' },
+  { value: 'price_desc', label: '价格 ↓' },
   { value: 'views', label: '最多浏览' }
 ]
 
