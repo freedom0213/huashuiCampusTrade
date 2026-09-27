@@ -22,9 +22,6 @@ public final class RedisKeys {
     /** 有待回写浏览量的商品 id 集合，Set，用于避免全库扫描 */
     public static final String PRODUCT_DIRTY_VIEWS = "product:dirty:views";
 
-    /** 热门商品榜，ZSET，score 为热度值 */
-    public static final String PRODUCT_HOT = "product:hot";
-
     /** 商品分类列表缓存，String(JSON)，变更时删除 */
     public static final String CATEGORY_LIST = "category:list";
 

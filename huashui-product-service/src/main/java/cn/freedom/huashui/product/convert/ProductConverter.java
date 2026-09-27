@@ -24,6 +24,17 @@ public final class ProductConverter {
     }
 
     public static ProductListVO toListVO(Product product) {
+        return toListVO(product, false);
+    }
+
+    /**
+     * 转换成列表卡片。
+     *
+     * @param includeRejectReason 是否填充审核驳回原因。
+     *                            <b>只有「我的发布」应传 true</b>——驳回原因是卖家私事，
+     *                            收藏列表 / 公共列表都复用本方法，无条件填充会把它泄露给买家
+     */
+    public static ProductListVO toListVO(Product product, boolean includeRejectReason) {
         ProductListVO vo = new ProductListVO();
         vo.setId(product.getId());
         vo.setTitle(product.getTitle());
@@ -36,6 +47,9 @@ public final class ProductConverter {
         vo.setConditionDesc(descOfCondition(product.getConditionLevel()));
         vo.setStatus(product.getStatus());
         vo.setStatusDesc(descOfStatus(product.getStatus()));
+        if (includeRejectReason) {
+            vo.setRejectReason(product.getRejectReason());
+        }
         vo.setViewCount(product.getViewCount());
         vo.setFavoriteCount(product.getFavoriteCount());
         vo.setPublishTime(product.getPublishTime());

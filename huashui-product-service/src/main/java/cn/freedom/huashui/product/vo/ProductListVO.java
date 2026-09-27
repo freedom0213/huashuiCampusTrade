@@ -48,6 +48,18 @@ public class ProductListVO {
     @Schema(description = "状态中文")
     private String statusDesc;
 
+    /**
+     * 审核驳回原因。**只在「我的发布」里透出**，其余场景恒为 null。
+     *
+     * <p>为什么不做成「有值就返回」：驳回原因属于卖家私事。
+     * 收藏列表用的是同一个 {@code ProductListVO}——商品被驳回后，
+     * 当初收藏过它的用户仍会在收藏页看到这件商品；若无条件透出，
+     * 买家就能读到「卖家为什么被驳回」。公共列表同理（虽然它只查在售、天然拿不到）。
+     * 所以由服务层显式决定是否填充，而不是让「字段有值」自动等于「可以给外面看」。
+     */
+    @Schema(description = "审核驳回原因。仅「我的发布」返回，其余场景为 null")
+    private String rejectReason;
+
     private Integer viewCount;
 
     private Integer favoriteCount;

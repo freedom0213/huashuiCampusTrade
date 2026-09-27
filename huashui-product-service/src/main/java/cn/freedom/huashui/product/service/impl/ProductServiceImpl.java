@@ -228,7 +228,9 @@ public class ProductServiceImpl implements ProductService {
         // 「我的发布」默认按创建时间倒序（刚发的排最前），而不是上架时间
         wrapper.orderByDesc(Product::getCreateTime);
         wrapper.orderByDesc(Product::getId);
-        return pageQuery(query, wrapper);
+        // 只有这里带回驳回原因：被驳回的商品需要直接告诉卖家原因，
+        // 否则前端只能对每张卡片再单独查一次详情
+        return pageQuery(query, wrapper, true);
     }
 
     @Override
@@ -566,11 +568,24 @@ public class ProductServiceImpl implements ProductService {
     }
 
     private PageResult<ProductListVO> pageQuery(ProductQueryDTO query, LambdaQueryWrapper<Product> wrapper) {
+        return pageQuery(query, wrapper, false);
+    }
+
+    /**
+     * 分页查询并转换成列表卡片。
+     *
+     * @param includeRejectReason 是否填充驳回原因。**只有「我的发布」传 true**：
+     *                            驳回事由是卖家私事，收藏列表复用同一转换器，
+     *                            无条件填充会让当初收藏过该商品的买家读到它
+     */
+    private PageResult<ProductListVO> pageQuery(ProductQueryDTO query,
+                                                LambdaQueryWrapper<Product> wrapper,
+                                                boolean includeRejectReason) {
         Page<Product> page = new Page<>(query.getPage(), query.getSize());
         IPage<Product> result = productMapper.selectPage(page, wrapper);
 
         List<ProductListVO> records = result.getRecords().stream()
-                .map(ProductConverter::toListVO)
+                .map(product -> ProductConverter.toListVO(product, includeRejectReason))
                 .toList();
         return PageResult.of(result.getTotal(), result.getCurrent(), result.getSize(), records);
     }
