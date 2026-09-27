@@ -115,6 +115,8 @@ flowchart TB
 | Nacos HTTP | 8848 | 18848 | Docker Compose |
 | Nacos gRPC | 9848 / 9849 | 19848 / 19849 | Docker Compose |
 | XXL-JOB 调度中心 | 8080 | 18080 | Docker Compose |
+| Sentinel 控制台 | 8858 | 18858 | Docker Compose |
+| Sentinel 客户端（gateway / user / product / order） | — | 8719 / 8720 / 8721 / 8722 | 内嵌在服务里 |
 
 > Nacos 客户端的 gRPC 端口按「主端口 + 1000 / +1001」推导，因此 `18848` 对应 `19848` / `19849`。
 
@@ -158,6 +160,7 @@ docker compose -f docker/docker-compose.yml ps
 | Nacos 控制台 | http://127.0.0.1:18848/nacos | 本地未开启鉴权 |
 | RabbitMQ 管理台 | http://127.0.0.1:15673 | `huashui` / `huashui@123` |
 | XXL-JOB 调度中心 | http://127.0.0.1:18080/xxl-job-admin | `admin` / `123456`（首次登录后请改） |
+| Sentinel 控制台 | http://127.0.0.1:18858 | `sentinel` / `sentinel` |
 
 > 容器端口只绑定 `127.0.0.1`，局域网内其他设备无法访问。
 > `docker-compose.yml` 中的凭据是**本地开发专用**，生产环境应改为通过环境变量注入。
@@ -201,6 +204,26 @@ done
 > （这两个开关就是为此预留的降级通道）。但要注意：**两个开关为 false 且调度中心没起时，
 > 超时订单不会有人清理**。
 
+## 服务保护（Sentinel）
+
+保护分两层：**网关限流挡住外部流量**，**服务内熔断隔离故障依赖**。
+
+| 位置 | 保护对象 | 规则 | 被触发时的行为 |
+|---|---|---|---|
+| 网关 | `POST /api/user/login` | QPS 5 | HTTP 429 + `{"code":429,"message":"操作过于频繁，请稍后再试"}` |
+| 网关 | `GET /api/product/detail/{id}` | QPS 50 | 同上 |
+| 网关 | `POST /api/order` | QPS 10 | 同上 |
+| product-service | 商品详情（按 `productId` 计数） | 单个商品 QPS 20 | `{"code":429,"message":"操作过于频繁，请稍后再试"}` |
+| order-service | 对商品服务的全部调用（资源名 `productClient`） | 异常比例 > 50%（10s 窗口、最少 5 次请求） | 熔断 30s，期间下单**快速失败**：`{"code":30006,"message":"商品服务暂时不可用，请稍后重试"}` |
+
+设计上有几点是刻意的：
+
+- **限流按接口而不是按服务**：用 Sentinel 的「API 分组」精确到接口。若按服务名限流，登录接口被限流时会连带把「改密码」「看资料」一起掐掉。
+- **熔断共享一个资源名**：order 侧对商品域的 4 个调用（锁定 / 解锁 / 标记售出 / 兜底扫描）共用一个熔断器，因为反映的是「商品服务健不健康」这一件事。
+- **降级绝不伪造成功**：下单是线下见面付款的起点，「以为下单成功、到地方发现没有」的代价远大于让用户重试一次。
+- **业务失败与故障区分开**：「商品已被别人买走」是正常业务结果，不抛异常、不进熔断统计；只有远程调用失败才计入。
+- **规则写在代码里**（`SentinelGatewayConfig` / `SentinelRuleConfig`）：启动即生效、可进 git、可被 review。控制台用于演示动态调整，改完立即生效、重启回到代码里的默认值；后续接入 Nacos 配置中心后改为 Push 模式持久化。
+
 ## 开发进度
 
 - [x] 总体设计 V1
@@ -214,9 +237,10 @@ done
 - [x] 阶段 8：收藏 + Redis 缓存体系
 - [x] 阶段 9：RabbitMQ 消息可靠性
 - [x] 阶段 10：XXL-JOB 分布式任务调度
-- [ ] 阶段 11：Sentinel
-- [ ] 阶段 12：商品审核 + 管理端
-- [ ] 阶段 13：Docker 全量部署 + 文档
+- [x] 阶段 11：Sentinel 限流 / 熔断降级
+- [ ] 阶段 12：Nacos 配置中心
+- [ ] 阶段 13：商品审核 + 管理端
+- [ ] 阶段 14：Docker 全量部署 + 文档
 
 数据库建表与初始化脚本见 [`docs/sql/`](docs/sql/)，可直接执行
 （脚本顶部已声明 `SET NAMES utf8mb4`，避免中文 Windows 下导入乱码）。

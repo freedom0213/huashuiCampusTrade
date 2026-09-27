@@ -1,7 +1,7 @@
 # ============================================================
 # 华水校园闲置交易平台 —— 本地基础设施
 #
-# 只包含 Redis / RabbitMQ / Nacos 三个中间件。
+# 包含 Redis / RabbitMQ / Nacos / XXL-JOB 调度中心 / Sentinel 控制台。
 # MySQL 使用本机已安装的 8.0.34（3306），不容器化。
 #
 # 【为什么端口不是默认值】
@@ -132,6 +132,36 @@ services:
       timeout: 5s
       retries: 10
       start_period: 40s
+
+  # ---------------- Sentinel 控制台：限流规则的可视化配置与实时监控 ----------------
+  #
+  # 【为什么用 bladex 的镜像】Sentinel 官方没有发布 docker 镜像，这个社区镜像
+  # 是最常用的一个（1.8.6 与 spring-cloud-alibaba 2023.0.1.0 内置的客户端版本一致）。
+  #
+  # 【镜像的端口约定】容器内固定 8858（镜像的 ENTRYPOINT 里写死了
+  # -Dserver.port=8858，而且 ENTRYPOINT 不是 shell 形式，塞 JAVA_OPTS 是无效的）。
+  # 所以这里只做端口映射，不改它的端口。
+  #
+  # 【为什么客户端要配「合法 IP 格式」的 client-ip】方向是「容器 → 宿主机」：
+  # 控制台要靠客户端心跳上报的 IP 去回调（拉取实时指标、下发规则）。
+  # 两个坑（阶段 11 实证）：
+  #   ① host.docker.internal 会被控制台以 "invalid ip" 拒绝（它校验 IP 格式），
+  #      且失败包在 HTTP 200 里返回、客户端不报错；
+  #   ② 网关进程里 Sentinel 的配置快照发生在 SCA 设置属性之前，心跳地址会缓存为空。
+  # 最终落地：业务三服务用 application.yml 的
+  #   spring.cloud.sentinel.transport.client-ip=${SENTINEL_CLIENT_IP:192.168.65.254}
+  # 网关额外用 sentinel.properties 兜底（192.168.65.254 即 Docker Desktop 下
+  # host.docker.internal 解析出的宿主机地址，查询方式见该文件注释）。
+  #
+  # 【默认凭据】sentinel / sentinel（镜像内置，未修改）。端口只绑 127.0.0.1，
+  # 不对外网暴露；生产部署时应改成环境变量注入的强口令。
+  sentinel-dashboard:
+    image: bladex/sentinel-dashboard:1.8.6
+    container_name: huashui-sentinel-dashboard
+    restart: unless-stopped
+    ports:
+      # 宿主机 18858 → 容器 8858。与 Nacos 的 18848 保持同一段，方便记
+      - "127.0.0.1:18858:8858"
 
 volumes:
   redis-data:

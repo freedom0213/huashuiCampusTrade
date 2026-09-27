@@ -33,6 +33,27 @@
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
 
+        <!--
+          限流熔断（阶段 11）。本服务用两处 Sentinel 能力：
+            ① 商品详情的【热点参数限流】—— 按 productId 限「单个商品」的 QPS，
+               防止某个商品被脚本刷爆（网关那层只能限总量，分不出是哪个商品）；
+            ② 系统自适应保护（SystemRule）兜底。
+        -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+        </dependency>
+
+        <!--
+          必须显式引入 AOP。@SentinelResource 是靠切面生效的，而 SCA 的 starter
+          把 spring-boot-starter-aop 标成了 optional（不传递），
+          漏了它注解会【静默失效】—— 不报错、不生效、规则永远触发不了
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
         <!-- 消息队列：消费「订单已取消」消息，把商品恢复为在售 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

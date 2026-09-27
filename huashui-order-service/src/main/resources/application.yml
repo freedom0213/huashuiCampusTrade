@@ -45,6 +45,19 @@ spring:
         server-addr: 127.0.0.1:18848
         namespace: public
 
+    # ---------------- Sentinel 限流熔断（阶段 11）----------------
+    # 本服务的重点不是限流而是【熔断】：下单要同步调用商品服务锁定商品，
+    # 商品服务一旦挂掉/变慢，若不熔断，每个下单请求都会占着 Tomcat 线程
+    # 等满 Feign 超时（2s + 3s），并发一上来线程池就被拖垮 ——
+    # 一个依赖的故障会演变成整个交易域不可用
+    sentinel:
+      transport:
+        dashboard: 127.0.0.1:18858
+        # 控制台在容器里、本服务在宿主机：必须是合法 IP 且容器可反连（理由见网关配置）
+        client-ip: ${SENTINEL_CLIENT_IP:192.168.65.254}
+        port: 8722
+      eager: true
+
     openfeign:
       client:
         config:

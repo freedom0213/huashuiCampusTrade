@@ -47,6 +47,25 @@
             <artifactId>huashui-common</artifactId>
         </dependency>
 
+        <!--
+          限流熔断（阶段 11）。网关要引【两个】依赖，缺一不可：
+            1) spring-cloud-starter-alibaba-sentinel —— SCA 的 Sentinel 自动配置。
+               它依赖里的 spring-boot-starter-web / webflux 都是 optional，
+               因此【不会】把 Servlet 栈带进网关（这是能用的前提，见本文件顶部说明）。
+            2) spring-cloud-alibaba-sentinel-gateway —— 网关专用适配器，提供
+               SentinelGatewayFilter 与 sentinel-spring-cloud-gateway-adapter。
+               第 1 个依赖里【没有】它，只引第 1 个的话网关限流规则永远不生效，
+               而且不会报任何错 —— 属于「静默失效」类故障
+        -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-alibaba-sentinel-gateway</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>

@@ -36,6 +36,16 @@
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
 
+        <!--
+          限流熔断（阶段 11）。本服务自身没有需要保护的方法，
+          接入的目的有两个：① 登录接口的防爆破限流在网关做，服务内保留统计能力便于排查；
+          ② 系统自适应保护（SystemRule）是进程级的，每个服务都要装载才有兜底
+        -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+        </dependency>
+
         <!-- 数据访问：Spring Boot 3 必须用 spring-boot3 专用 starter -->
         <dependency>
             <groupId>com.baomidou</groupId>

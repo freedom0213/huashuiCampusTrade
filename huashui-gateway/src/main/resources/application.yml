@@ -17,6 +17,30 @@ spring:
         server-addr: 127.0.0.1:18848
         namespace: public
 
+    # ---------------- Sentinel 限流（阶段 11）----------------
+    # 网关是「限流最该待的地方」：所有外部流量都从这里过，
+    # 规则只配一处就能拦住打向任何服务的流量，不用每个服务各写一套。
+    sentinel:
+      transport:
+        # 控制台：容器内 8858，宿主机映射 18858（见 docker/docker-compose.yml）
+        dashboard: 127.0.0.1:18858
+        # 🔴 控制台在容器里、本服务在宿主机上，方向是「容器 → 宿主机」。
+        # 心跳上报的 IP 有两个硬性要求：
+        #   ① 必须是合法 IP 格式 —— host.docker.internal 会被控制台以
+        #      "invalid ip" 拒绝，且失败包在 HTTP 200 里返回、客户端不报错，
+        #      表现为「服务在控制台里永远不出现」这种静默失效；
+        #   ② 控制台容器能通过它反连本服务的 transport 端口（拉指标/推规则）。
+        # 默认值是 Docker Desktop 下 host.docker.internal 解析出的宿主机地址；
+        # 不同环境可能不同，查询自己的值：
+        #   docker exec huashui-sentinel-dashboard getent hosts host.docker.internal
+        client-ip: ${SENTINEL_CLIENT_IP:192.168.65.254}
+        # 各服务显式分配端口。同机跑 4 个服务时都抢默认 8719，
+        # Sentinel 会静默 +1 递增，「谁占了哪个端口」变得随机，排查时对不上号
+        port: 8719
+      # 启动即注册到控制台。默认是懒加载：控制台要等该服务的第一个请求才看得到它，
+      # 演示时容易误判成「没接上」
+      eager: true
+
     gateway:
       discovery:
         locator:

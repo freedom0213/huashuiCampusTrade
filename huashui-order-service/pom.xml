@@ -34,6 +34,29 @@
         </dependency>
 
         <!--
+          限流熔断（阶段 11）。本服务的重点是【Feign 调用的熔断降级】：
+          商品服务挂掉时下单必须快速失败，不能挂着 Tomcat 线程干等 Feign 的读超时
+          （等久了线程池会被拖垮，一个依赖故障演变成全站不可用）。
+          规则与降级行为见 ProductInvoker / SentinelRuleConfig
+        -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+        </dependency>
+
+        <!--
+          必须显式引入 AOP。@SentinelResource 靠切面生效，而 SCA 的 starter 把
+          spring-boot-starter-aop 标成了 optional（不传递）。
+          漏了它注解会【静默失效】：不报错、熔断永远不触发，
+          只表现为「商品服务停了，下单还是要干等 Feign 超时」——
+          像性能问题而不像配置缺失，最难查
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
+        <!--
           服务间调用。本模块是整个项目里唯一发起 Feign 调用的服务：
           下单要锁商品、付款要把商品置为已售出，都必须问商品域。
           反向（product → order）刻意不做，会形成循环依赖。

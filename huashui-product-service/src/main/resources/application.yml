@@ -71,6 +71,18 @@ spring:
         server-addr: 127.0.0.1:18848
         namespace: public
 
+    # ---------------- Sentinel 限流（阶段 11）----------------
+    # 本服务用的是【热点参数限流】：按 productId 给「单个商品」设 QPS 上限。
+    # 网关那层只能限「商品详情接口的总量」，分不出流量是散在 1000 个商品上，
+    # 还是全砸在某 1 个商品上 —— 后者才是会打穿缓存的形态
+    sentinel:
+      transport:
+        dashboard: 127.0.0.1:18858
+        # 控制台在容器里、本服务在宿主机：必须是合法 IP 且容器可反连（理由见网关配置）
+        client-ip: ${SENTINEL_CLIENT_IP:192.168.65.254}
+        port: 8721
+      eager: true
+
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true

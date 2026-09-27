@@ -2,11 +2,14 @@ package cn.freedom.huashui.product.controller;
 
 import cn.freedom.huashui.common.result.PageResult;
 import cn.freedom.huashui.common.result.Result;
+import cn.freedom.huashui.product.config.SentinelRuleConfig;
 import cn.freedom.huashui.product.dto.ProductQueryDTO;
 import cn.freedom.huashui.product.dto.ProductSaveDTO;
+import cn.freedom.huashui.product.sentinel.ProductDetailBlockHandler;
 import cn.freedom.huashui.product.service.ProductService;
 import cn.freedom.huashui.product.vo.ProductDetailVO;
 import cn.freedom.huashui.product.vo.ProductListVO;
+import com.alibaba.csp.sentinel.annotation.SentinelResource;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -83,6 +86,9 @@ public class ProductController {
     }
 
     @GetMapping("/detail/{id}")
+    @SentinelResource(value = SentinelRuleConfig.RESOURCE_PRODUCT_DETAIL,
+            blockHandler = "blocked",
+            blockHandlerClass = ProductDetailBlockHandler.class)
     @Operation(summary = "商品详情", description = "无需登录。待审核与已驳回的商品仅卖家本人可见")
     public Result<ProductDetailVO> detail(@PathVariable("id") Long id) {
         return Result.success(productService.detail(id));

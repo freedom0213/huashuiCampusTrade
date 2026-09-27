@@ -1,12 +1,12 @@
 package cn.freedom.huashui.order.job;
 
-import cn.freedom.huashui.common.api.product.ProductClient;
 import cn.freedom.huashui.common.enums.OrderStatus;
 import cn.freedom.huashui.common.result.Result;
 import cn.freedom.huashui.order.config.OrderProperties;
 import cn.freedom.huashui.order.entity.Order;
 import cn.freedom.huashui.order.mapper.OrderMapper;
 import cn.freedom.huashui.order.mq.OrderMessageSender;
+import cn.freedom.huashui.order.remote.ProductInvoker;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.xxl.job.core.context.XxlJobHelper;
 import com.xxl.job.core.handler.annotation.XxlJob;
@@ -46,7 +46,11 @@ public class StaleLockScanJob {
     /** 解锁原因，会写进本地消息记录与日志，供事后追溯「为什么这件商品被放回在售」 */
     private static final String UNLOCK_REASON_TEMPLATE = "商品锁定超过 %d 分钟且无有效订单，自动解锁";
 
-    private final ProductClient productClient;
+    /**
+     * 商品域调用的出口。不直接注入 {@code ProductClient}：直接调 Feign 会绕过熔断器，
+     * 商品服务挂掉时每轮扫描都要干等满 Feign 超时（这正是兜底任务最不该发生的事）
+     */
+    private final ProductInvoker productInvoker;
     private final OrderMapper orderMapper;
     private final OrderMessageSender messageSender;
     private final OrderProperties orderProperties;
@@ -60,7 +64,7 @@ public class StaleLockScanJob {
 
         List<Long> candidates;
         try {
-            Result<List<Long>> response = productClient.listStaleLocked(
+            Result<List<Long>> response = productInvoker.listStaleLocked(
                     beforeMinutes, orderProperties.getStaleLockBatchSize());
             if (response == null || !response.isSuccess() || response.getData() == null) {
                 String message = "商品服务返回异常，本轮跳过 | response=" + response;

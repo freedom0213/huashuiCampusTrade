@@ -31,6 +31,18 @@ spring:
         server-addr: 127.0.0.1:18848
         namespace: public
 
+    # ---------------- Sentinel 限流（阶段 11）----------------
+    # 登录接口的防爆破限流配在网关（login_api，QPS 5）。
+    # 本服务接入 Sentinel 主要是为了两件事：① 控制台里能看到本服务的实时调用曲线；
+    # ② 系统自适应保护是「进程级」的，每个服务都得装载才有兜底
+    sentinel:
+      transport:
+        dashboard: 127.0.0.1:18858
+        # 控制台在容器里、本服务在宿主机：必须是合法 IP 且容器可反连（理由见网关配置）
+        client-ip: ${SENTINEL_CLIENT_IP:192.168.65.254}
+        port: 8720
+      eager: true
+
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true

@@ -1,6 +1,5 @@
 package cn.freedom.huashui.order.service.impl;
 
-import cn.freedom.huashui.common.api.product.ProductClient;
 import cn.freedom.huashui.common.api.product.ProductLockDTO;
 import cn.freedom.huashui.common.context.UserContext;
 import cn.freedom.huashui.common.enums.OrderStatus;
@@ -13,6 +12,7 @@ import cn.freedom.huashui.order.dto.OrderQueryDTO;
 import cn.freedom.huashui.order.entity.Order;
 import cn.freedom.huashui.order.mapper.OrderMapper;
 import cn.freedom.huashui.order.mq.OrderMessageSender;
+import cn.freedom.huashui.order.remote.ProductInvoker;
 import cn.freedom.huashui.order.service.OrderService;
 import cn.freedom.huashui.order.service.PayService;
 import cn.freedom.huashui.order.vo.OrderVO;
@@ -59,7 +59,11 @@ public class OrderServiceImpl implements OrderService {
     private static final String CANCEL_REASON_SELLER = "卖家主动取消";
 
     private final OrderMapper orderMapper;
-    private final ProductClient productClient;
+    /**
+     * 商品域调用的唯一出口。刻意不直接注入 {@code ProductClient}：
+     * 直接调 Feign 会绕过熔断器，商品服务挂掉时每个下单请求都要干等满 Feign 超时
+     */
+    private final ProductInvoker productInvoker;
     private final PayService payService;
     private final OrderMessageSender messageSender;
     private final OrderProperties orderProperties;
@@ -339,21 +343,15 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private ProductLockDTO lockProduct(Long productId, Long buyerId) {
-        Result<ProductLockDTO> result;
-        try {
-            result = productClient.lock(productId, buyerId);
-        } catch (Exception e) {
-            // Feign 会抛异常只有两种情况：连不上商品服务，或对方返回了非 2xx。
-            // 「商品已被别人买走」这类业务失败走的是 HTTP 200 + 业务码，不会落到这里
-            log.error("调用商品服务锁定商品失败 | productId={} | buyerId={}", productId, buyerId, e);
-            throw new BizException(ResultCode.SYSTEM_ERROR, "商品服务暂时不可用，请稍后重试");
-        }
-        return unwrap(result, "锁定商品失败，请稍后重试");
+        // 远程调用的异常转换与熔断降级统一在 ProductInvoker 内完成
+        //（那里是被注入的 Bean，能拿到 Spring 代理，@SentinelResource 才生效）；
+        // 这里只负责把失败的 Result 抬成业务异常，让调用方走统一的失败分支
+        return unwrap(productInvoker.lock(productId, buyerId), "锁定商品失败，请稍后重试");
     }
 
     private void markProductSold(Order order) {
         try {
-            Result<Void> result = productClient.markSold(order.getProductId());
+            Result<Void> result = productInvoker.markSold(order.getProductId());
             if (result == null || !result.isSuccess()) {
                 log.error("订单已付款，但商品标记已售出失败 | orderNo={} | productId={} | 响应={}",
                         order.getOrderNo(), order.getProductId(), result);
@@ -367,14 +365,19 @@ public class OrderServiceImpl implements OrderService {
     private void compensateUnlock(Long productId, Exception cause) {
         log.error("建单失败，开始补偿解锁商品 | productId={}", productId, cause);
         try {
-            productClient.unlock(productId);
-            log.info("补偿解锁成功 | productId={}", productId);
-        } catch (Exception e) {
-            // 补偿也失败 → 商品会一直停在「已锁定」，且没有订单指向它，
+            Result<Void> result = productInvoker.unlock(productId);
+            if (result != null && result.isSuccess()) {
+                log.info("补偿解锁成功 | productId={}", productId);
+                return;
+            }
+            // 补偿失败 → 商品会一直停在「已锁定」，且没有订单指向它，
             // 超时取消任务（扫订单表）永远扫不到。这是本方案唯一的脏状态，
-            // 阶段 10 会用「已锁定超过 N 分钟且无有效订单」的扫描任务兜底；
+            // 已由阶段 10 的 staleLockScanJob（「已锁定超过 N 分钟且无有效订单」）兜底；
             // 在此之前，这条日志是唯一的发现途径
-            log.error("补偿解锁商品失败，商品将保持锁定，需人工介入 | productId={}", productId, e);
+            log.error("补偿解锁商品失败，商品将保持锁定，待 staleLockScanJob 兜底 | productId={} | 响应={}",
+                    productId, result);
+        } catch (Exception e) {
+            log.error("补偿解锁商品失败，商品将保持锁定，待 staleLockScanJob 兜底 | productId={}", productId, e);
         }
     }
 
