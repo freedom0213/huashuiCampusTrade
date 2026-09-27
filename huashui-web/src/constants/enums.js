@@ -44,12 +44,13 @@ export const ORDER_STATUS = {
   CANCELLED: 3
 }
 
-export const ORDER_STATUS_DESC = {
-  0: '待付款',
-  1: '已付款',
-  2: '交易完成',
-  3: '已取消'
-}
+/* ⚠️ 订单状态**只有 `ORDER_STATUS_LABEL` 一份文案表**，不要再加一个 DESC 版本：
+   曾经这里有个 `ORDER_STATUS_DESC`（内容与 LABEL 几乎一样，只差 status=1 的措辞），
+   两个几乎同名的常量并存 → 很容易 import 错那个，然后页面上就会显示成
+   后端的「已付款」而不是产品口径的「已付款，待收货」。
+   这类"标签显示差半句"的问题不会报错，只在肉眼看页面时才发现，所以从源头去掉重复。
+   （对比：商品的 `PRODUCT_STATUS_DESC` 是**后端文案的兜底**，
+    用在 `statusDesc` 缺失时，与它不构成重复，保留。） */
 
 export const ORDER_STATUS_STYLE = {
   0: 'warn',
@@ -136,7 +137,11 @@ export const SORT_OPTIONS = [
 ]
 
 /* ---------------- 错误码 ----------------
-   🔴 只有在需要「前置拦截」时才用错误码；其余情况直接把后端 message 展示给用户 */
+   ⚠️ **这是一张参考表，不是装饰**：前端目前**没有任何地方直接 import 它**，
+   因为后端的 `message` 已经是可读中文，直接展示即可（见 useToast 的 toastFromError）。
+   保留它的用途是「需要前置拦截时照码取值」，以及开发时对照后端 ResultCode。
+   🔴 只有当某处**确实**需要按码分支（例如 `if (e.code === 10006)` 把提示写进输入框）时，
+      才建议改用这里的常量，而不是在业务代码里裸写数字。 */
 export const ERR = {
   UNAUTHORIZED: 401,
   PARAM_ERROR: 400,

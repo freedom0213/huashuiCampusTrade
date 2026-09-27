@@ -9,7 +9,10 @@ defineProps({
   error: { type: String, default: '' },
   /** row：label 在左（个人资料页）／ block：无 label 的整行输入（登录/注册页） */
   variant: { type: String, default: 'block' },
-  autocomplete: { type: String, default: 'off' }
+  autocomplete: { type: String, default: 'off' },
+  /* 🔴 必须显式声明才能在移动端生效：`inputmode` 是原生属性，不声明就会被 Vue 当作
+     透传属性挂到**根 div** 上（而不是里面的 input），手机键盘不会切成数字态。 */
+  inputmode: { type: String, default: undefined }
 })
 
 defineEmits(['update:modelValue'])
@@ -26,6 +29,7 @@ defineEmits(['update:modelValue'])
         :maxlength="maxlength"
         :readonly="readonly"
         :autocomplete="autocomplete"
+        :inputmode="inputmode"
         @input="$emit('update:modelValue', $event.target.value)"
       />
     </div>

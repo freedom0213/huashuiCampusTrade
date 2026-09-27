@@ -8,7 +8,10 @@ const props = defineProps({
   title: { type: String, default: '请选择' },
   /** [{ value, label }]，value 为 null 表示「不限」 */
   options: { type: Array, default: () => [] },
-  modelValue: { type: [String, Number, null], default: null }
+  /* 值可能是 null（「不限」选项）→ 用 default: null 表达，**不要**把 null 写进 type 数组：
+     type 里放的是构造函数，null 不是；Vue 只在 required 时才校验 null，所以不会报错，
+     但那是"侥幸不报错"，读代码的人会以为它有什么作用。 */
+  modelValue: { type: [String, Number], default: null }
 })
 
 const emit = defineEmits(['update:modelValue', 'close'])

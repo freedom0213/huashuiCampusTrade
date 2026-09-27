@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import FormField from '@/components/FormField.vue'
 import * as userApi from '@/api/user'
 import { toastFromError, toastOk } from '@/composables/useToast'
+import { ERR } from '@/constants/enums'
 import { RULES, validateField } from '@/utils/validate'
 
 /* 注册页。
@@ -53,9 +54,9 @@ async function submit() {
     toastOk('注册成功', '请登录')
     router.replace({ path: '/login', query: { username: form.value.username.trim() } })
   } catch (e) {
-    // 10001 用户名已被注册 / 10002 手机号已被注册 → 原因写在输入框下方，比 toast 更可操作
-    if (e.code === 10001) errors.value.username = e.message
-    else if (e.code === 10002) errors.value.phone = e.message
+    // 用户名已被注册 / 手机号已被注册 → 原因写在输入框下方，比 toast 更可操作
+    if (e.code === ERR.USERNAME_EXISTS) errors.value.username = e.message
+    else if (e.code === ERR.PHONE_EXISTS) errors.value.phone = e.message
     else toastFromError(e, '注册失败')
   } finally {
     loading.value = false

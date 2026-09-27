@@ -6,8 +6,7 @@ import { useUserStore } from '@/stores/user'
 import * as userApi from '@/api/user'
 import { uploadImage } from '@/api/file'
 import { toastFromError, toastOk } from '@/composables/useToast'
-import { clearAuth } from '@/api/request'
-import { IMAGE_ACCEPT } from '@/constants/enums'
+import { ERR, IMAGE_ACCEPT } from '@/constants/enums'
 import { RULES, validateField } from '@/utils/validate'
 
 /* 个人资料页。
@@ -123,8 +122,8 @@ async function changePassword() {
     toastOk('密码已修改', '请重新登录')
     router.replace('/login')
   } catch (e) {
-    // 10006 原密码不正确 → 提示写在原密码输入框下，比 toast 可操作
-    if (e.code === 10006) pwdErrors.value.old = e.message
+    // 原密码不正确 → 提示写在原密码输入框下，比 toast 可操作
+    if (e.code === ERR.OLD_PASSWORD_ERROR) pwdErrors.value.old = e.message
     else toastFromError(e, '修改失败')
   } finally {
     changingPwd.value = false

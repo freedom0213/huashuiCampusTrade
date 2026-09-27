@@ -56,9 +56,10 @@ const conditionLabel = computed(
   () => CONDITION_FILTER_OPTIONS.find((o) => o.value === condition.value)?.label || '成色'
 )
 
-/** 只带上真正有值的参数，避免 `campus=null` 这类脏串进 URL 与请求 */
+/** 只带上真正有值的参数，避免 `campus=null` 这类脏串进 URL 与请求。
+    每页条数不在这里指定，由 useProductList 的默认值统一决定。 */
 function buildParams() {
-  const p = { sort: sort.value, size: 20 }
+  const p = { sort: sort.value }
   if (kw.value.trim()) p.kw = kw.value.trim()
   if (categoryId.value) p.categoryId = categoryId.value
   if (campus.value) p.campus = campus.value
@@ -69,11 +70,7 @@ function buildParams() {
 /** 条件变了：同步 URL（replace 避免刷历史）→ 回到列表顶部 → 重新请求 */
 function apply() {
   const p = buildParams()
-  const query = {}
-  Object.keys(p).forEach((k) => {
-    if (k !== 'size') query[k] = p[k]
-  })
-  router.replace({ path: '/search', query })
+  router.replace({ path: '/search', query: { ...p } })
   // 筛选条件变了就是一批新结果，停在原来的滚动深度没有意义
   if (scrollerEl.value) scrollerEl.value.scrollTop = 0
   list.setParams(p)

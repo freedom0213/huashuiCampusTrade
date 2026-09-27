@@ -12,11 +12,18 @@ import { listProducts } from '@/api/product'
  * 说明：`total` 取自后端 PageResult.total，用来判断「还有没有下一页」，
  * 不靠「本页条数 < size」判断（后者在总数正好整除时会多发一次空请求）。
  */
-export function useProductList(baseParams = {}) {
+export function useProductList(initialParams = {}) {
+  /* 🔴 每页条数由本 composable 统一管理，所以要先把它从 baseParams 里**摘出来**。
+     原实现写成 `listProducts({ ...baseParams, page, size: size.value })`，
+     后面的 `size` 永远覆盖前面的 → 调用方传的 `size` **静默失效**
+     （首页热门推荐传 6、卖家主页传 50，实际都按默认 20 请求）。
+     这类"传了没生效"不会报错，只看得出「列表条数不对」，所以在这里一次修掉。 */
+  const { size: initialSize, ...baseParams } = initialParams
+  const size = ref(Number(initialSize) > 0 ? Number(initialSize) : 20)
+
   const items = ref([])
   const total = ref(0)
   const page = ref(1)
-  const size = ref(20)
   const loading = ref(false)
   const loadingMore = ref(false)
   const finished = ref(false)
@@ -73,10 +80,12 @@ export function useProductList(baseParams = {}) {
 
   /** 替换全部筛选条件并重新加载。
       必须是「整体替换」而不是 merge —— 否则去掉某个筛选时旧 key 会残留，
-      表现为「取消了校区筛选但结果还是只出龙子湖」。 */
+      表现为「取消了校区筛选但结果还是只出龙子湖」。
+      `size` 不在替换范围内（它由本 composable 管理），传了也只当没传，避免脏 key 进请求。 */
   function setParams(next) {
+    const { size: _ignored, ...rest } = next || {}
     Object.keys(baseParams).forEach((k) => delete baseParams[k])
-    Object.assign(baseParams, next)
+    Object.assign(baseParams, rest)
     return load(true)
   }
 

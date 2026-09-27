@@ -19,7 +19,10 @@ const SCHOOL = '华北水利水电大学'
 const categories = ref([])
 const { hasNotice, checkNotice } = useNotice()
 
-const hot = useProductList({ sort: 'views', size: 6 })
+/* 热门推荐只出 4 个（设计文档 §4.1：「最多 4 个，右侧查看全部」），
+   2 列栅格正好两行；想看更多的走「查看全部 → /search?sort=views」。
+   最新发布是首页的第二个分区，首屏看不到，滚动后出现，所以给 20 条 + 触底加载。 */
+const hot = useProductList({ sort: 'views', size: 4 })
 const latest = useProductList({ sort: 'newest', size: 20 })
 
 /* 从详情页返回时：还原滚动位置 + 不重播卡片入场动画

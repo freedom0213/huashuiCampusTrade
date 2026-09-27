@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { getToken } from '@/api/request'
-import PlaceholderView from '@/views/PlaceholderView.vue'
 
 /* ==========================================================
    路由表 —— 与 docs/02-前端设计V1.md 的 14 个页面一一对应
@@ -8,11 +7,8 @@ import PlaceholderView from '@/views/PlaceholderView.vue'
      title  页面标题（顶栏用）
      tab    底栏高亮项（home | publish | mine），不参与则留空
      auth   是否需要登录
-     block  计划在哪个块实现（块 1 只搭骨架，页面按块替换）
      apis   本页会调用的接口（作为「活清单」，实现时逐条划掉）
    ========================================================== */
-
-const Placeholder = PlaceholderView
 
 const routes = [
   {
@@ -202,7 +198,7 @@ const routes = [
   {
     path: '/:pathMatch(.*)*',
     name: 'notFound',
-    component: Placeholder,
+    component: () => import('@/views/NotFoundView.vue'),
     meta: { title: '页面不存在' }
   }
 ]
