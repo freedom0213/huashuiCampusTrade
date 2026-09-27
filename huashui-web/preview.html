@@ -299,6 +299,15 @@
 
       let current = '/'
 
+      /* 支持 ?path=/login 之类的深链：直接打开某个页面，便于分享 / 截图 / 复现问题。
+         也支持完整路径带参数，如 ?path=/product/2103... */
+      const DEEP_PATH = (() => {
+        const p = new URLSearchParams(location.search).get('path')
+        if (!p) return ''
+        return p.startsWith('/') ? p : '/' + p
+      })()
+      if (DEEP_PATH) current = DEEP_PATH
+
       /* ══════════ 开发服务器地址探测 ══════════
          🔴 为什么必须探测，而不是直接用相对路径：
             本页可能**不是**由 Vite 提供的。实测踩到过——把 preview.html 交给 WorkBuddy
@@ -543,6 +552,12 @@
         ;[...routesEl.children].forEach((b) =>
           b.classList.toggle('on', b.dataset.path === path)
         )
+      }
+
+      /* 深链进来时同步左侧按钮高亮（有对应按钮就点亮） */
+      if (DEEP_PATH) {
+        const b = [...routesEl.children].find((x) => x.dataset.path === DEEP_PATH)
+        if (b) b.classList.add('on')
       }
 
       document.getElementById('openCustom').onclick = () => {

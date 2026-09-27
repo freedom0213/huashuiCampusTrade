@@ -49,37 +49,40 @@ function goRegister() {
   <div class="page">
     <div class="page-scroll">
       <div class="authwrap">
-        <div class="brand rise">
-          <div class="logo">华水</div>
-          <h1>华水闲置</h1>
-          <p>校园闲置 · 当面自提</p>
+        <!-- 三行结构：「表单上方全部内容」/「登录按钮」/「按钮下方全部内容」
+             中间行是按钮 → 两侧 1fr 严格平分，按钮中心恒等于视口中心 -->
+        <div class="head">
+          <div class="brand rise">
+            <div class="logo">华水</div>
+            <h1>华水闲置</h1>
+            <p>校园闲置 · 当面自提</p>
+          </div>
+
+          <div class="formblock rise rise-1">
+            <FormField
+              v-model="username"
+              placeholder="用户名"
+              autocomplete="username"
+              :error="errors.username"
+              @update:model-value="errors.username = ''"
+            />
+            <FormField
+              v-model="password"
+              type="password"
+              placeholder="密码"
+              autocomplete="current-password"
+              :error="errors.password"
+              @keyup.enter="submit"
+              @update:model-value="errors.password = ''"
+            />
+          </div>
         </div>
 
-        <!-- 表单块（用户名 + 密码）：整个页面的视觉重心，垂直居中于视口 -->
-        <div class="formblock rise rise-1">
-          <FormField
-            v-model="username"
-            placeholder="用户名"
-            autocomplete="username"
-            :error="errors.username"
-            @update:model-value="errors.username = ''"
-          />
-          <FormField
-            v-model="password"
-            type="password"
-            placeholder="密码"
-            autocomplete="current-password"
-            :error="errors.password"
-            @keyup.enter="submit"
-            @update:model-value="errors.password = ''"
-          />
-        </div>
+        <button class="btn-main wide rise rise-2" :disabled="!canSubmit" @click="submit">
+          {{ loading ? '登录中…' : '登录' }}
+        </button>
 
-        <div class="tail">
-          <button class="btn-main wide rise rise-2" :disabled="!canSubmit" @click="submit">
-            {{ loading ? '登录中…' : '登录' }}
-          </button>
-
+        <div class="foot">
           <div class="switchrow rise rise-3">
             还没有账号？<b class="press" @click="goRegister">立即注册</b>
           </div>
@@ -91,24 +94,30 @@ function goRegister() {
 </template>
 
 <style scoped>
-/* ══════════ 垂直布局：让「用户名 + 密码」落在视口垂直中心 ══════════
-   🔴 为什么不用「整体加个 margin-top」：那样只是把内容整体推下去，
-      表单仍然偏上（因为表单下方还有按钮 / 注册链接 / 协议三段）。
+/* ══════════ 垂直布局：让「登录按钮」落在视口垂直中心 ══════════
+   设计稿实测：图 09 的按钮中心 423（相对含 50px 状态栏的屏），本就在中心附近。
+   用户口径（2026-09-27 修正）：居中的是**登录按钮**，不是用户名密码 ——
+   上一版把用户名密码居中，视觉上"重心偏下、头轻脚重"，用户明确否掉了。
 
-   🔴 为什么用 grid 的 1fr 而不是 flex 的 flex:1 1 0：
-      实测 flex 下 `flex-basis: 0` **并不会严格平分** —— 因为 flex item 的
-      `min-height: auto` 会以「内容高度」作为最小尺寸，上下两块内容量不同
-      （brand 内容 164 / tail 内容 168）就会被分到不同高度。
-      实测：品牌块得 361、尾部块得 327，表单中心 417，比视口中心 **偏下 11px**。
-      `grid-template-rows: minmax(0,1fr) auto minmax(0,1fr)` 则严格平分剩余空间，
-      与内容多少完全无关（minmax(0,…) 是为了解除 min-content 约束）。
-      实测表单中心 = 406 = 视口中心，**偏差 0**。 */
+   做法：把内容切成三行，中间行就是按钮本身：
+       行1  .head  = 品牌 + 用户名 + 密码     align-self: end  → 贴向按钮
+       行2  button = 按钮                      auto
+       行3  .foot  = 注册入口 + 协议          align-self: start → 贴向按钮
+   两侧 1fr **严格平分**剩余空间 ⇒ 按钮中心恒等于视口中心。
+
+   🔴 两点必须注意：
+   ① 要用 grid 的 1fr，**不能用 flex 的 flex:1 1 0** —— flex item 的
+      `min-height:auto` 以内容高度为最小尺寸，上下内容量不同就分不到相等高度
+      （实测 361 vs 327）。grid 的 1fr 与内容无关。
+   ② `.page-scroll` 必须保留 `display:flex; flex-direction:column`，
+      否则 `.authwrap` 的 flex:1 没有 flex 上下文、高度退化成内容高度。
+
+   按钮上方的间距放在 `.head` 的 padding-bottom（而不是按钮的 margin-top）：
+   grid 行高 = 元素高 + margin，若用 margin 会抬高行2 从而把按钮挤偏下
+   （实测偏下 14px）；放 padding 里则不影响行2 高度。 */
 .page-scroll {
-  /* 必须是 flex column：否则 .authwrap 的 flex:1 没有 flex 上下文，
-     高度会退化成内容高度（实测 459），grid 的 1fr 也就无从平分。 */
   display: flex;
   flex-direction: column;
-  /* 只留安全区；额外留白交给 grid，否则上下不对称会破坏居中 */
   padding-top: var(--safe-top);
   padding-bottom: var(--safe-top);
 }
@@ -121,44 +130,57 @@ function goRegister() {
   padding: 0 28px;
 }
 
-.brand {
+.head {
   align-self: end;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  text-align: center;
-  padding: 0 0 34px;
   min-height: 0;
+  padding-bottom: 28px;
+}
+
+.foot {
+  align-self: start;
+  min-height: 0;
+}
+
+.brand {
+  text-align: center;
+  padding: 26px 0 34px;
 }
 
 .formblock {
   min-height: 0;
 }
-/* 🔴 去掉最后一个字段的 12px 底部间距：
-   它不可见但要占高度 → 表单块高 124 而可见内容只有 112 →
-   可见区域中心落在 400，比视口中心 406 偏上 6px。
-   去掉后表单块 = 可见内容 112，中心精确等于 406。 */
+/* 🔴 去掉最后一个字段的 12px 底部间距：它不可见但要占高度，
+   会让 .head 的内容比可见内容高 12px。 */
 .formblock :deep(.ff:last-child) {
   margin-bottom: 0;
 }
 
-.tail {
-  min-height: 0;
+/* ── 矮屏处理（断点由实测内容高度反推，不是估的）──
+   .head 实测高 330（品牌 190 + 表单 112 + 按钮上方间距 28）。
+   需要「行1 ≥ .head」：
+     行1 = (H − 按钮 48) / 2 ≥ 330  →  H ≥ 708
+
+   ① 720 以下：压缩品牌留白（26/34 → 12/20，省 28px）→
+      .head 降到 298，覆盖到 H ≥ 644，**iPhone SE（667）仍能精确居中**。
+      实测未压缩时 700 高度下品牌 top = −4（被裁 4px），压缩后不再裁。
+      ② 640 以下：实在放不下，退回「自然高度 + 靠上排列 + 可滚动」，
+      优先保证内容完整可读（内容总高 471，480 以上都能完整显示）。 */
+@media (max-height: 720px) {
+  .brand {
+    padding: 12px 0 20px;
+  }
+  .head {
+    padding-bottom: 24px;
+  }
 }
 
-/* ── 矮屏兜底 ──
-   阈值推算（视口高 H）：grid 两行各得 (H − 表单块 112) / 2，
-   要放得下上方内容 164 → H ≥ 440；要放得下下方内容 168 → H ≥ 448。
-   取 480 留出余量：480 以上一律居中（覆盖 iPhone SE 667 起的全部机型），
-   480 以下才退回「自然高度 + 靠上排列 + 可滚动」，保证内容完整可读。 */
-@media (max-height: 480px) {
+@media (max-height: 640px) {
   .authwrap {
     flex: 0 0 auto;
     grid-template-rows: auto auto auto;
   }
-  .brand {
+  .head {
     align-self: start;
-    padding: 26px 0 34px;
   }
 }
 .logo {
@@ -191,8 +213,8 @@ function goRegister() {
 
 .wide {
   width: 100%;
-  /* 40 = 原设计的 28，加上被移除的字段尾部间距 12，保持按钮与表单的视觉间距不变 */
-  margin-top: 40px;
+  /* 按钮上方的间距由 .head 的 padding-bottom 提供（见上方说明），故此处归零 */
+  margin-top: 0;
 }
 
 .switchrow {
