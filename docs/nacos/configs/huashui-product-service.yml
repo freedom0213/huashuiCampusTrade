@@ -8,6 +8,6 @@
 huashui:
   product:
     # Whether a newly published product requires admin review.
-    # false during development (admin panel comes in a later phase);
-    # after the admin panel ships, flip it here - no code change needed.
-    audit-required: false
+    # Final form since phase 13 (admin audit API shipped): true.
+    # Flip to false only when you intentionally want publish-on-post behavior.
+    audit-required: true

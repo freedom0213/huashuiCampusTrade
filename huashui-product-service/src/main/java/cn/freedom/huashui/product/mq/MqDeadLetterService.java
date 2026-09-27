@@ -2,6 +2,7 @@ package cn.freedom.huashui.product.mq;
 
 import cn.freedom.huashui.common.api.mq.OrderCancelledMessage;
 import cn.freedom.huashui.common.constant.MqConstants;
+import cn.freedom.huashui.common.mq.OrderCancelMqTopology;
 import cn.freedom.huashui.product.config.MqProperties;
 import cn.freedom.huashui.product.vo.DeadLetterItemVO;
 import cn.freedom.huashui.product.vo.DeadLetterVO;
@@ -54,26 +55,25 @@ public class MqDeadLetterService {
     private final MqProperties mqProperties;
     private final RabbitTemplate rabbitTemplate;
     private final AmqpAdmin amqpAdmin;
-    private final ObjectMapper objectMapper;
     private final RestTemplateBuilder restTemplateBuilder;
+
+    /**
+     * 死信重放 / 查看用的 mapper。必须与消息转换器同一份配置（ISO-8601 时间、不做前端定制），
+     * 由 {@link OrderCancelMqTopology#buildMqObjectMapper()} 静态工厂提供。
+     * 它刻意不注册成 bean——容器里出现任何 ObjectMapper 都会让 Boot 带序列化规则的
+     * 自动 mapper 退避（阶段 13 实测教训，见该方法的 javadoc）。
+     */
+    private final ObjectMapper objectMapper = OrderCancelMqTopology.buildMqObjectMapper();
 
     private RestTemplate restTemplate;
 
-    /**
-     * ⚠️ ObjectMapper 必须用 {@code mqObjectMapper}（与消息转换器同一份），
-     * 而不是容器里那个：容器 mapper 的 LocalDateTime 格式是给前端定的
-     * {@code yyyy-MM-dd HH:mm:ss}，消息体写的是 ISO-8601。拿错的话，
-     * 「自己服务发出的消息自己解析不了」，重放功能整体失效——验证环节实测踩中过。
-     */
     public MqDeadLetterService(MqProperties mqProperties,
                                RabbitTemplate rabbitTemplate,
                                AmqpAdmin amqpAdmin,
-                               @Qualifier("mqObjectMapper") ObjectMapper objectMapper,
                                RestTemplateBuilder restTemplateBuilder) {
         this.mqProperties = mqProperties;
         this.rabbitTemplate = rabbitTemplate;
         this.amqpAdmin = amqpAdmin;
-        this.objectMapper = objectMapper;
         this.restTemplateBuilder = restTemplateBuilder;
     }
 

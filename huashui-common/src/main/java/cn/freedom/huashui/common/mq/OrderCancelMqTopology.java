@@ -144,18 +144,24 @@ public class OrderCancelMqTopology {
     }
 
     /**
-     * 消息体专用的 ObjectMapper，与 {@link #jsonMessageConverter()} 用同一份配置。
+     * 消息体专用的 ObjectMapper 构建工厂，与 {@link #jsonMessageConverter()} 用同一份配置。
      *
-     * <p>单独立一个 Bean 是被验证环节逼出来的：死信重放要解析消息体，
-     * 注入容器里那个 ObjectMapper 的话——它把 LocalDateTime 定成 {@code yyyy-MM-dd HH:mm:ss}
+     * <p>单独立一份配置是被验证环节逼出来的：死信重放要解析消息体，
+     * 注入 HTTP 用的 ObjectMapper 的话——它把 LocalDateTime 定成 {@code yyyy-MM-dd HH:mm:ss}
      * （为浏览器前端定的），而消息转换器写的是 ISO-8601。格式对不上，
      * 「自己服务发出的消息自己解析不了」，重放功能整体失效。
      * 消息体是服务间契约，读写必须同一份规则。
      *
-     * @return 消息体专用的 ObjectMapper
+     * <p>⚠️ <b>刻意不注册成 ObjectMapper 类型的 @Bean（阶段 13 实测教训）</b>：
+     * 容器里只要存在任何 ObjectMapper bean，Boot 自动配置的 jacksonObjectMapper
+     * （带 common 的 Long→字符串、时间格式等规则）就会因 {@code @ConditionalOnMissingBean}
+     * 整体退避，HTTP 消息转换器转而用 MQ 这份 mapper —— 全站 HTTP 序列化静默退化
+     * （Long 变裸数字 + 时间变 ISO，前端拿到 19 位雪花 ID 会丢精度）。
+     * 所以 MQ 的 mapper 只以静态工厂存在，不进 bean 容器。
+     *
+     * @return 消息体专用的 ObjectMapper（每次调用新建，调用方自行持有）
      */
-    @Bean
-    public ObjectMapper mqObjectMapper() {
+    public static ObjectMapper buildMqObjectMapper() {
         ObjectMapper mapper = JsonMapper.builder()
                 .addModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
@@ -179,8 +185,8 @@ public class OrderCancelMqTopology {
      * @return JSON 消息转换器
      */
     @Bean
-    public MessageConverter jsonMessageConverter(ObjectMapper mqObjectMapper) {
-        Jackson2JsonMessageConverter converter = new Jackson2JsonMessageConverter(mqObjectMapper);
+    public MessageConverter jsonMessageConverter() {
+        Jackson2JsonMessageConverter converter = new Jackson2JsonMessageConverter(buildMqObjectMapper());
         // 注意导入位置：TypePrecedence 是 Jackson2JavaTypeMapper 的内部枚举，
         // 不在 Jackson2JsonMessageConverter 里；而 setTypePrecedence 由
         // AbstractJackson2MessageConverter 提供。写错位置编译期就报「找不到符号」

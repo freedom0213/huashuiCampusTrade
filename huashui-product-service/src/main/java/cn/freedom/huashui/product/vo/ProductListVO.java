@@ -60,6 +60,9 @@ public class ProductListVO {
     @Schema(description = "审核驳回原因。仅「我的发布」返回，其余场景为 null")
     private String rejectReason;
 
+    @Schema(description = "卖家 id。详情页跳转卖家主页 / 管理端定位卖家都用它")
+    private Long sellerId;
+
     private Integer viewCount;
 
     private Integer favoriteCount;

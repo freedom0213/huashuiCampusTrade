@@ -467,6 +467,94 @@ public class ProductServiceImpl implements ProductService {
         log.info("商品已售出 | productId={}", productId);
     }
 
+    // ==================== 管理端（阶段 13：商品审核） ====================
+
+    @Override
+    public PageResult<ProductListVO> listForAudit(Integer status, Integer current, Integer size) {
+        UserContext.requireAdmin();
+
+        int statusCode = status == null ? ProductStatus.PENDING_AUDIT.getCode() : status;
+        if (ProductStatus.of(statusCode) == null) {
+            throw new BizException(ResultCode.PARAM_ERROR, "未知的商品状态");
+        }
+        // 管理列表不需要关键词 / 分类等筛选，直接用三个裸参数，不为它建 QueryDTO
+        long page = current == null || current < 1 ? 1 : current;
+        long pageSize = size == null || size < 1 ? 10 : Math.min(size, 50);
+
+        Page<Product> result = productMapper.selectPage(new Page<>(page, pageSize),
+                new LambdaQueryWrapper<Product>()
+                        .eq(Product::getStatus, statusCode)
+                        .orderByDesc(Product::getCreateTime)
+                        .orderByDesc(Product::getId));
+
+        List<ProductListVO> records = result.getRecords().stream()
+                // 驳回原因本来就是管理员写的，管理员列表无条件带回
+                .map(p -> ProductConverter.toListVO(p, true))
+                .toList();
+        return PageResult.of(result.getTotal(), result.getCurrent(), result.getSize(), records);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void approve(Long productId) {
+        UserContext.requireAdmin();
+        LocalDateTime now = LocalDateTime.now();
+        int affected = productMapper.update(null, new LambdaUpdateWrapper<Product>()
+                .eq(Product::getId, productId)
+                .eq(Product::getStatus, ProductStatus.PENDING_AUDIT.getCode())
+                .set(Product::getStatus, ProductStatus.ON_SALE.getCode())
+                .set(Product::getPublishTime, now)
+                .set(Product::getUpdateTime, now));
+        requireAuditTransition(productId, affected, "商品不在待审核状态，无法通过审核");
+        evictDetailCache(productId);
+        log.info("审核通过 | productId={} | adminId={}", productId, UserContext.getUserId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void reject(Long productId, String reason) {
+        UserContext.requireAdmin();
+        int affected = productMapper.update(null, new LambdaUpdateWrapper<Product>()
+                .eq(Product::getId, productId)
+                .eq(Product::getStatus, ProductStatus.PENDING_AUDIT.getCode())
+                .set(Product::getStatus, ProductStatus.REJECTED.getCode())
+                .set(Product::getRejectReason, reason)
+                .set(Product::getUpdateTime, LocalDateTime.now()));
+        requireAuditTransition(productId, affected, "商品不在待审核状态，无法驳回");
+        evictDetailCache(productId);
+        log.info("审核驳回 | productId={} | adminId={} | reason={}", productId, UserContext.getUserId(), reason);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void forceOffShelf(Long productId) {
+        UserContext.requireAdmin();
+        int affected = productMapper.update(null, new LambdaUpdateWrapper<Product>()
+                .eq(Product::getId, productId)
+                .eq(Product::getStatus, ProductStatus.ON_SALE.getCode())
+                .set(Product::getStatus, ProductStatus.OFF_SHELF.getCode())
+                .set(Product::getUpdateTime, LocalDateTime.now()));
+        requireAuditTransition(productId, affected,
+                "只有「在售」的商品才能强制下架（已锁定 / 已售出的商品存在在途交易）");
+        evictDetailCache(productId);
+        log.info("强制下架 | productId={} | adminId={}", productId, UserContext.getUserId());
+    }
+
+    /**
+     * 条件更新受影响行数为 0 时给出准确的失败语义。
+     * 「商品根本不存在」与「存在但状态不对」是两种不同的错误——前者 20003，后者 20006。
+     */
+    private void requireAuditTransition(Long productId, int affected, String illegalMessage) {
+        if (affected > 0) {
+            return;
+        }
+        Product product = productMapper.selectById(productId);
+        if (product == null) {
+            throw new BizException(ResultCode.PRODUCT_NOT_FOUND);
+        }
+        throw new BizException(ResultCode.PRODUCT_STATUS_ILLEGAL, illegalMessage);
+    }
+
     @Override
     public List<Long> listStaleLockedIds(int beforeMinutes, int limit) {
         Page<Product> page = new Page<>(1, limit);

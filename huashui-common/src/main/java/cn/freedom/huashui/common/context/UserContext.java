@@ -58,6 +58,17 @@ public final class UserContext {
         return UserRole.isAdmin(getRole());
     }
 
+    /**
+     * 要求当前用户是管理员（role=2），否则抛 403。
+     * 用于管理端接口的统一鉴权——权限校验放在服务层而非网关，
+     * 与「网关只做路由与身份透传、不做业务校验」的架构约定一致。
+     */
+    public static void requireAdmin() {
+        if (!isAdmin()) {
+            throw new BizException(ResultCode.FORBIDDEN);
+        }
+    }
+
     public static void clear() {
         HOLDER.remove();
     }

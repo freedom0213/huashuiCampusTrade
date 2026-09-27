@@ -53,6 +53,7 @@ public final class ProductConverter {
         vo.setViewCount(product.getViewCount());
         vo.setFavoriteCount(product.getFavoriteCount());
         vo.setPublishTime(product.getPublishTime());
+        vo.setSellerId(product.getSellerId());
         return vo;
     }
 

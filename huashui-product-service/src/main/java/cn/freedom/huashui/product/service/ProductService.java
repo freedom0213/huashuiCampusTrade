@@ -57,6 +57,30 @@ public interface ProductService {
      */
     ProductDetailVO detail(Long productId);
 
+    // ==================== 管理端（阶段 13：商品审核） ====================
+
+    /**
+     * 审核列表：按状态查商品（默认待审核，可查已驳回）。仅管理员可调用。
+     */
+    PageResult<ProductListVO> listForAudit(Integer status, Integer current, Integer size);
+
+    /**
+     * 审核通过：待审核 → 在售，并补记发布时间。仅管理员可调用。
+     */
+    void approve(Long productId);
+
+    /**
+     * 审核驳回：待审核 → 已驳回，记录驳回原因。仅管理员可调用。
+     */
+    void reject(Long productId, String reason);
+
+    /**
+     * 强制下架：在售 → 已下架。仅管理员可调用。
+     * <p>已锁定 / 已售出的商品有在途交易，不允许强制下架；
+     * 卖家重新上架时会因审核开关再次进入待审核，无法借机绕过审核。
+     */
+    void forceOffShelf(Long productId);
+
     // ==================== 内部接口（仅供 order-service 调用） ====================
 
     /**
