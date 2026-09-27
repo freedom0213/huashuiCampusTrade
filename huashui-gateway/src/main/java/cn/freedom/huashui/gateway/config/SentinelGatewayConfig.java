@@ -44,8 +44,10 @@ import java.util.Set;
  * Sentinel 默认把规则放在内存，控制台里改的规则一重启就没了，
  * 也进不了 git、没法被 review。这里装载一份「默认规则」保证服务起来即具备防护；
  * 控制台的作用是演示动态调整（改完立即生效，重启回到这里的默认值）。
- * 阶段 12 接入 Nacos 配置中心后，规则改为从配置中心推送（Push 模式持久化），
- * 这里的硬编码再删掉。
+ * <b>阶段 12 起，真正的规则事实来源是 Nacos</b>（dataId 见
+ * {@code huashui-gateway-flow-rules.json}，改完秒级生效、重启不丢）：
+ * Nacos 在本类之后加载，覆盖同资源的内置值；Nacos 没起时数据源静默失败，
+ * 这里装载的默认值继续兜底——所以本类的规则不能删，删了就失去降级能力。
  *
  * <p><b>本类不用 {@code huashui-common} 里那套 Web 相关配置：</b>
  * 网关是 WebFlux，common 中的 Web 配置都带 {@code @ConditionalOnWebApplication(SERVLET)}，

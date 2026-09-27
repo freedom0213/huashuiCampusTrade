@@ -11,8 +11,12 @@ spring:
 
   # 本地敏感配置（数据库账号密码）不提交到仓库。
   # 模板见同目录 application-local.yml.example。
+  # Nacos 配置中心（阶段 12）：支付超时等交易参数存 Nacos，改完秒级生效（@ConfigurationProperties 自动 rebind）；
+  # optional = Nacos 没起时服务照常启动。列表中后声明的优先级更高；两类配置不重叠
   config:
-    import: optional:classpath:application-local.yml
+    import:
+      - optional:classpath:application-local.yml
+      - optional:nacos:huashui-order-service.yml
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -44,6 +48,12 @@ spring:
       discovery:
         server-addr: 127.0.0.1:18848
         namespace: public
+        # 注册失败不阻断启动（Nacos 停机时服务照常起，注册后台重试；理由见网关配置）
+        fail-fast: false
+      config:
+        # 配置中心与注册中心是同一个 Nacos 实例；group 把本项目的配置圈起来
+        server-addr: 127.0.0.1:18848
+        group: HUASHUI_GROUP
 
     # ---------------- Sentinel 限流熔断（阶段 11）----------------
     # 本服务的重点不是限流而是【熔断】：下单要同步调用商品服务锁定商品，
@@ -57,6 +67,18 @@ spring:
         client-ip: ${SENTINEL_CLIENT_IP:192.168.65.254}
         port: 8722
       eager: true
+
+      # ---------------- 熔断规则持久化（阶段 12）----------------
+      # 规则内容存 Nacos（dataId: huashui-order-degrade-rules.json），
+      # 改完秒级生效、重启不丢。Nacos 没起时静默失败，代码内置规则兜底
+      datasource:
+        degrade-rules:
+          nacos:
+            server-addr: 127.0.0.1:18848
+            group-id: HUASHUI_GROUP
+            data-id: huashui-order-degrade-rules.json
+            data-type: json
+            rule-type: degrade
 
     openfeign:
       client:

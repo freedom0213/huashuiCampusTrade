@@ -66,6 +66,27 @@
             <artifactId>spring-cloud-alibaba-sentinel-gateway</artifactId>
         </dependency>
 
+        <!--
+          配置中心（阶段 12）。网关的 Sentinel 限流规则从 Nacos 读取（Push 持久化），
+          替代阶段 11 「代码内置默认值、重启即丢」的方式。
+          import 用 optional 前缀：Nacos 没起时服务照常启动，走代码内置兜底规则
+        -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
+
+        <!--
+          Sentinel 规则的 Nacos 数据源实现。
+          SCA 的 sentinel-datasource 只有抽象层（FactoryBean），
+          不加这个具体实现，启动时会直接 NoClassDefFoundError:
+          com.alibaba.csp.sentinel.datasource.nacos.NacosDataSource
+        -->
+        <dependency>
+            <groupId>com.alibaba.csp</groupId>
+            <artifactId>sentinel-datasource-nacos</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>

@@ -1,0 +1,10 @@
+[
+  {
+    "resource": "productClient",
+    "grade": 1,
+    "count": 0.5,
+    "statIntervalMs": 10000,
+    "minRequestAmount": 5,
+    "timeWindow": 30
+  }
+]

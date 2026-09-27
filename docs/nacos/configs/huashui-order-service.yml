@@ -1,0 +1,27 @@
+# ============================================================
+# Trade-domain tunable params (dataId: huashui-order-service.yml)
+#
+# IMPORTANT: keep this file ASCII-only.
+# SCA encodes the pulled Nacos content with the JVM default charset
+# (GBK on zh-CN Windows), so any non-ASCII byte here breaks SnakeYAML
+# parsing and the whole config silently falls back to code defaults.
+# Chinese documentation lives in docs/nacos/README.md instead.
+#
+# Changes here take effect within seconds, no restart needed
+# (@ConfigurationProperties rebind).
+# ============================================================
+
+huashui:
+  order:
+    # Pay timeout in minutes: auto-cancel an unpaid order after this window.
+    # Business rule: 30 min = the meet-up-and-pay window (not thinking time).
+    # For timeout-cancel demo you can temporarily set it to 1.
+    pay-timeout-minutes: 30
+    # Max resend attempts for the local message table; beyond this mark as failed.
+    local-message-max-retry: 5
+    # Per-round batch sizes to avoid pulling too much at once.
+    local-message-batch-size: 100
+    timeout-batch-size: 200
+    # Stale-lock scan threshold = pay-timeout-minutes + this buffer.
+    stale-lock-buffer-minutes: 5
+    stale-lock-batch-size: 100

@@ -1,0 +1,9 @@
+# ============================================================
+# User-domain main config (dataId: huashui-user-service.yml)
+#
+# No tunable business params yet; placeholder, same as the gateway.
+# DB credentials deliberately stay OUT of Nacos: local dev uses
+# application-local.yml, production should use env vars / secret
+# management - a config center is not a place for plaintext secrets.
+# NOTE: keep this file ASCII-only (GBK/UTF-8 issue on Windows).
+# ============================================================

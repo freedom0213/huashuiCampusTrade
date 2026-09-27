@@ -1,0 +1,11 @@
+# ============================================================
+# Gateway main config (dataId: huashui-gateway.yml)
+#
+# No tunable business params yet; this file is a placeholder.
+# NOTE: keep this file ASCII-only (GBK/UTF-8 issue on Windows).
+#
+# Where things live:
+# - rate-limit rules: huashui-gateway-flow-rules.json
+# - routes / white-list: structural config, change them via a release,
+#   do NOT move them into Nacos.
+# ============================================================

@@ -45,6 +45,21 @@
         </dependency>
 
         <!--
+          配置中心（阶段 12）：发布是否需要审核（audit-required）可在线调整；
+          商品详情的热点参数规则存 Nacos 持久化。import 用 optional：Nacos 没起照常启动
+        -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
+
+        <!-- Sentinel 规则 Nacos 数据源的具体实现，缺了启动直接 NoClassDefFoundError（理由见网关 pom） -->
+        <dependency>
+            <groupId>com.alibaba.csp</groupId>
+            <artifactId>sentinel-datasource-nacos</artifactId>
+        </dependency>
+
+        <!--
           必须显式引入 AOP。@SentinelResource 是靠切面生效的，而 SCA 的 starter
           把 spring-boot-starter-aop 标成了 optional（不传递），
           漏了它注解会【静默失效】—— 不报错、不生效、规则永远触发不了

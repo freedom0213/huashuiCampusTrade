@@ -9,6 +9,13 @@ spring:
   application:
     name: huashui-gateway
 
+  # ---------------- Nacos 配置中心（阶段 12）----------------
+  # 限流规则与业务参数存 Nacos，改完秒级生效（Push 持久化），
+  # 取代阶段 11「规则写在代码里、重启回默认」的兜底方式。
+  # optional = Nacos 没起时网关照常启动，走代码内置的兜底规则
+  config:
+    import: optional:nacos:huashui-gateway.yml
+
   cloud:
     nacos:
       discovery:
@@ -16,6 +23,14 @@ spring:
         # 客户端会自动按「端口 + 1000」连接 gRPC 的 19848，compose 里已一并映射
         server-addr: 127.0.0.1:18848
         namespace: public
+        # 注册失败不阻断启动（默认 true = 直接起不来）。Nacos 短暂不可用时
+        # 服务照常对外工作，注册由客户端后台重试补上；
+        # 代价是「注册失败只有日志没有启动报错」——排查服务互相找不到时先看这里
+        fail-fast: false
+      config:
+        # 配置中心与注册中心是同一个 Nacos 实例；group 把本项目的配置圈起来
+        server-addr: 127.0.0.1:18848
+        group: HUASHUI_GROUP
 
     # ---------------- Sentinel 限流（阶段 11）----------------
     # 网关是「限流最该待的地方」：所有外部流量都从这里过，
@@ -40,6 +55,21 @@ spring:
       # 启动即注册到控制台。默认是懒加载：控制台要等该服务的第一个请求才看得到它，
       # 演示时容易误判成「没接上」
       eager: true
+
+      # ---------------- 限流规则持久化（阶段 12）----------------
+      # 规则内容存 Nacos（dataId: huashui-gateway-flow-rules.json），长轮询监听、改完秒级生效。
+      # Sentinel 控制台从「改规则的入口」降级为「只看监控」——因为官方控制台的推规则
+      # 是推到客户端内存（重启即丢），持久化要么改它的源码要么用云服务，都不划算。
+      # 与代码内置兜底的关系：Nacos 的规则加载在后，覆盖同资源的内置值；
+      # Nacos 没起时数据源静默失败，代码内置规则继续兜底
+      datasource:
+        flow-rules:
+          nacos:
+            server-addr: 127.0.0.1:18848
+            group-id: HUASHUI_GROUP
+            data-id: huashui-gateway-flow-rules.json
+            data-type: json
+            rule-type: flow
 
     gateway:
       discovery:

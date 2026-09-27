@@ -177,6 +177,18 @@ mysql -uhuashui -p < docs/sql/05-xxl-job-init.sql  # 执行器组 + 4 个任务�
 >
 > 任务定义做成脚本而不是在界面里点：别人克隆后导入即可用，且 cron / 阻塞策略这些配置可被 review。
 
+**2.2 导入 Nacos 配置（阶段 12）**
+
+```bash
+python docs/nacos/import-configs.py   # 幂等，可重复执行
+```
+
+> 业务参数与 Sentinel 规则存 Nacos（group `HUASHUI_GROUP`），改完秒级生效、无需重启。
+> **改规则 / 调参数在 Nacos 控制台做**（`http://127.0.0.1:18848/nacos`）；Sentinel 控制台只看监控。
+> `configs/` 下的文件必须保持纯 ASCII（Windows 下 SCA 按 JVM 默认编码 GBK 解码 Nacos 内容，
+> 中文注释会导致整份配置解析失败并静默回退到代码默认值，详见 `docs/nacos/README.md`）。
+> Nacos 没启动时服务照常启动，走代码内置的兜底规则——两套规则同值，只是失去热更新能力。
+
 **3. 敏感配置**
 
 应用侧的数据库密码等**不提交到仓库**，复制模板到本地文件后填写：
@@ -222,7 +234,7 @@ done
 - **熔断共享一个资源名**：order 侧对商品域的 4 个调用（锁定 / 解锁 / 标记售出 / 兜底扫描）共用一个熔断器，因为反映的是「商品服务健不健康」这一件事。
 - **降级绝不伪造成功**：下单是线下见面付款的起点，「以为下单成功、到地方发现没有」的代价远大于让用户重试一次。
 - **业务失败与故障区分开**：「商品已被别人买走」是正常业务结果，不抛异常、不进熔断统计；只有远程调用失败才计入。
-- **规则写在代码里**（`SentinelGatewayConfig` / `SentinelRuleConfig`）：启动即生效、可进 git、可被 review。控制台用于演示动态调整，改完立即生效、重启回到代码里的默认值；后续接入 Nacos 配置中心后改为 Push 模式持久化。
+- **规则持久化在 Nacos**（阶段 12）：`docs/nacos/` 里的规则文件进 git、可 review、可回滚，改完秒级生效；代码里各 `SentinelRuleConfig` / `SentinelGatewayConfig` 装载的同值规则是 Nacos 未启动时的兜底。改规则在 Nacos 控制台做，Sentinel 控制台只看监控（官方控制台的推规则是内存态，重启即丢）。
 
 ## 开发进度
 
@@ -238,7 +250,7 @@ done
 - [x] 阶段 9：RabbitMQ 消息可靠性
 - [x] 阶段 10：XXL-JOB 分布式任务调度
 - [x] 阶段 11：Sentinel 限流 / 熔断降级
-- [ ] 阶段 12：Nacos 配置中心
+- [x] 阶段 12：Nacos 配置中心
 - [ ] 阶段 13：商品审核 + 管理端
 - [ ] 阶段 14：Docker 全量部署 + 文档
 

@@ -46,6 +46,13 @@
             <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
         </dependency>
 
+        <!-- 配置中心（阶段 12）：本服务暂无可调参数，先统一接入，
+             将来加参数时只需在 Nacos 建 dataId，不用动代码 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
+
         <!-- 数据访问：Spring Boot 3 必须用 spring-boot3 专用 starter -->
         <dependency>
             <groupId>com.baomidou</groupId>

@@ -11,8 +11,12 @@ spring:
 
   # 本地敏感配置（数据库账号密码）不提交到仓库。
   # 模板见同目录 application-local.yml.example，复制后填自己的密码。
+  # Nacos 配置中心（阶段 12）：业务参数存 Nacos，改完秒级生效；
+  # optional = Nacos 没起时服务照常启动。本服务暂无可调参数，dataId 先占位
   config:
-    import: optional:classpath:application-local.yml
+    import:
+      - optional:classpath:application-local.yml
+      - optional:nacos:huashui-user-service.yml
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -30,6 +34,12 @@ spring:
         # Nacos 宿主机端口 18848，客户端自动按 +1000 连 gRPC 19848
         server-addr: 127.0.0.1:18848
         namespace: public
+        # 注册失败不阻断启动（Nacos 停机时服务照常起，注册后台重试；理由见网关配置）
+        fail-fast: false
+      config:
+        # 配置中心与注册中心是同一个 Nacos 实例；group 把本项目的配置圈起来
+        server-addr: 127.0.0.1:18848
+        group: HUASHUI_GROUP
 
     # ---------------- Sentinel 限流（阶段 11）----------------
     # 登录接口的防爆破限流配在网关（login_api，QPS 5）。

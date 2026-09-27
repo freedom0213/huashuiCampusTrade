@@ -1,0 +1,23 @@
+[
+  {
+    "resource": "login_api",
+    "grade": 1,
+    "count": 5,
+    "strategy": 0,
+    "controlBehavior": 0
+  },
+  {
+    "resource": "product_detail_api",
+    "grade": 1,
+    "count": 50,
+    "strategy": 0,
+    "controlBehavior": 0
+  },
+  {
+    "resource": "order_create_api",
+    "grade": 1,
+    "count": 10,
+    "strategy": 0,
+    "controlBehavior": 0
+  }
+]

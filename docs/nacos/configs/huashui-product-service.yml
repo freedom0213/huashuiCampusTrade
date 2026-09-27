@@ -1,0 +1,13 @@
+# ============================================================
+# Product-domain tunable params (dataId: huashui-product-service.yml)
+#
+# IMPORTANT: keep this file ASCII-only (GBK/UTF-8 issue on Windows,
+# see huashui-order-service.yml for the full explanation).
+# ============================================================
+
+huashui:
+  product:
+    # Whether a newly published product requires admin review.
+    # false during development (admin panel comes in a later phase);
+    # after the admin panel ships, flip it here - no code change needed.
+    audit-required: false

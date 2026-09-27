@@ -16,7 +16,9 @@ import java.util.List;
  * 商品域的 Sentinel 规则（阶段 11）。
  *
  * <p>规则写在代码里的理由见网关的 {@code SentinelGatewayConfig}：
- * 保证服务启动即具备防护，控制台负责演示动态调整，阶段 12 改为从 Nacos 推送。
+ * 保证服务启动即具备防护。**阶段 12 起，Nacos（dataId: huashui-product-param-flow-rules.json）
+ * 是热点规则的事实来源，加载在后、覆盖这里的同资源规则**；本类保留作为 Nacos
+ * 未配置 / 未启动时的兜底，不能删。
  *
  * @author freedom0213
  */
