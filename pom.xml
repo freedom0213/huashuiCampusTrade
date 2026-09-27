@@ -42,6 +42,8 @@
         <mybatis-plus.version>3.5.7</mybatis-plus.version>
         <knife4j.version>4.5.0</knife4j.version>
         <jjwt.version>0.12.6</jjwt.version>
+        <!-- 分布式任务调度。2.4.x 是支持 Spring Boot 3 / JDK 17 的版本线 -->
+        <xxl-job.version>2.4.1</xxl-job.version>
     </properties>
 
     <dependencyManagement>
@@ -100,6 +102,13 @@
                 <groupId>cn.freedom.huashui</groupId>
                 <artifactId>huashui-common</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <!-- 分布式任务调度执行器（调度中心是独立容器，不走 Maven） -->
+            <dependency>
+                <groupId>com.xuxueli</groupId>
+                <artifactId>xxl-job-core</artifactId>
+                <version>${xxl-job.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

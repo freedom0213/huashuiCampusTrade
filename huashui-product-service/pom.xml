@@ -60,6 +60,12 @@
             <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
         </dependency>
 
+        <!-- 分布式任务调度执行器（浏览量结算等定时任务），调度中心见 docker-compose -->
+        <dependency>
+            <groupId>com.xuxueli</groupId>
+            <artifactId>xxl-job-core</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>cn.freedom.huashui</groupId>
             <artifactId>huashui-common</artifactId>

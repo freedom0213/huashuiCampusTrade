@@ -79,18 +79,48 @@ huashui:
   order:
     # 待支付超时分钟数。演示时可以调成 1，便于观察超时自动取消
     pay-timeout-minutes: 30
-    # 超时取消的兜底定时任务。正式方案是阶段 10 的 XXL-JOB，届时改为 false
-    timeout-task-enabled: true
+    # 本地 @Scheduled 兜底任务：阶段 10 接入 XXL-JOB 后关掉，改由调度中心触发
+    # （阶段 7 就是按「将来会被 XXL-JOB 取代」设计的，所以这里只是改一个开关，不动代码）
+    # ⚠️ 两个开关都是 false 时，不启动调度中心就没人清理超时订单 —— 只想跑单机时改回 true
+    timeout-task-enabled: false
     timeout-batch-size: 200
     timeout-task-interval-ms: 60000
 
     # ========== 本地消息表（消息可靠性）==========
     # 最大补发次数，超过则置为「失败待人工处理」，不再自动重试
     local-message-max-retry: 5
-    # 补发任务开关：阶段 10 接入 XXL-JOB 后改成 false 即可停用本地任务
-    local-message-task-enabled: true
+    # 补发任务开关：同上，改由 XXL-JOB 的 localMessageRetryJob 触发
+    local-message-task-enabled: false
     local-message-batch-size: 100
     local-message-task-interval-ms: 30000
+
+    # ========== 已锁定但无有效订单的扫描（阶段 10）==========
+    # 判定「锁定超时」的额外缓冲：实际阈值 = pay-timeout-minutes + 本值
+    # 留缓冲的原因：正常下单到付款之间的锁定是「进行中」而不是「异常」，
+    # 卡在同一个时间点上会把正在交易的商品误判为异常
+    stale-lock-buffer-minutes: 5
+    # 单轮最多处理多少个候选商品，防止一次拉太多把商品服务拖慢
+    stale-lock-batch-size: 100
+
+# ========== XXL-JOB 执行器 ==========
+xxl:
+  job:
+    # 调度中心地址。留空则不注册（执行器照常启动，只是任务不会被触发）
+    admin:
+      addresses: http://127.0.0.1:18080/xxl-job-admin
+    # 与调度中心 application.properties 中的 accessToken 一致，用于双向鉴权
+    access-token: huashui-job-token-2026
+    executor:
+      # 执行器名，需要在调度中心的「执行器管理」里对应上（AppName）
+      appname: huashui-order-service-executor
+      # ⚠️ 显式指定注册地址：调度中心在容器里、执行器在宿主机上，
+      #    自动探测会注册成容器到不了的 IP。host.docker.internal 由 Docker Desktop 解析回宿主机
+      address: http://host.docker.internal:6005
+      ip: ""
+      port: 6005
+      logpath: ./logs/xxl-job/order
+      logretentiondays: 7
+
 
 knife4j:
   enable: true

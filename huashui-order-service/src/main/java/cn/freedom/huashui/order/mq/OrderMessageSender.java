@@ -47,6 +47,9 @@ public class OrderMessageSender {
     /** 业务类型标识，写进本地消息表供人工排查 */
     public static final String BIZ_TYPE_ORDER_CANCELED = "ORDER_CANCELED";
 
+    /** 业务类型：兜底扫描发现「锁定超时且无有效订单」，通知商品域解锁 */
+    public static final String BIZ_TYPE_STALE_LOCK_UNLOCK = "STALE_LOCK_UNLOCK";
+
     /** 与 {@code t_local_message.error_msg} 的 {@code VARCHAR(500)} 对齐 */
     private static final int ERROR_MSG_MAX_LENGTH = 500;
 
@@ -107,6 +110,53 @@ public class OrderMessageSender {
         // ② 事务提交后再投递。
         //    绝不能在这里直接发 —— 此刻事务还没提交，一旦回滚就成了
         //    「消息已经发出去了，订单却没取消」，商品会被错误地解锁
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                publish(record);
+            }
+        });
+    }
+
+    /**
+     * 把「锁定超时且无有效订单」的解锁通知记入本地消息表。
+     *
+     * <p><b>与 {@link #recordOrderCancelled} 的区别：这条消息没有对应的订单。</b>
+     * 它是兜底扫描任务（{@code staleLockScanJob}）发现「商品被锁定、订单库里却没有有效订单」
+     * 时发出的救援指令。既然没有业务行要改，为什么还要走本地消息表？
+     * 因为「把解锁指令可靠地送到商品域」本身就是必须保证的事：
+     * 直接调 Feign 的话，调用失败就丢了，而商品会继续锁着；
+     * 写进本地消息表之后，发送失败有补发任务兜底，与取消订单享有同一套可靠性。
+     *
+     * <p>这里用 {@code REQUIRED} 而不是 {@code MANDATORY}：调用方（定时任务）本来就没有事务，
+     * 由本方法自建一个，把「插入消息记录」和「提交后投递」绑在一起。
+     */
+    @Transactional(propagation = Propagation.REQUIRED)
+    public void recordStaleLockUnlock(Long productId, String reason) {
+        OrderCancelledMessage message = new OrderCancelledMessage();
+        message.setMsgId("stale-lock-" + productId + "-" + UUID.randomUUID().toString().replace("-", ""));
+        // 用可读的伪订单号占位：消费端日志里会打印 orderNo，
+        // 留空会让排查时分不清「哪来的消息」，写成 STALE-LOCK 前缀一眼可辨
+        message.setOrderNo("STALE-LOCK-" + productId);
+        message.setProductId(productId);
+        message.setCancelTime(LocalDateTime.now());
+
+        LocalMessage record = new LocalMessage();
+        record.setMsgId(message.getMsgId());
+        record.setExchange(MqConstants.TRADE_EXCHANGE);
+        record.setRoutingKey(MqConstants.ORDER_CANCEL_ROUTING_KEY);
+        record.setBizType(BIZ_TYPE_STALE_LOCK_UNLOCK);
+        record.setBizId(String.valueOf(productId));
+        record.setPayload(serialize(message));
+        record.setStatus(LocalMessageStatus.PENDING);
+        record.setRetryCount(0);
+        record.setNextRetryTime(LocalDateTime.now());
+        record.setErrorMsg("");
+
+        localMessageMapper.insert(record);
+        log.warn("发现「锁定超时且无有效订单」的商品，已记入解锁消息 | productId={} | msgId={} | 原因={}",
+                productId, record.getMsgId(), reason);
+
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {

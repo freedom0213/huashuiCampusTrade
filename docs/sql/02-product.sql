@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS t_product
     KEY idx_campus_status_time (campus, status, publish_time),
     -- 首页默认排序：在售商品按上架时间倒序，该组合索引可直接支撑排序
     KEY idx_status_publish_time (status, publish_time),
+    -- 定时任务扫描「已锁定且长时间无有效订单」的商品：
+    -- 条件 status = LOCKED AND update_time < ? —— 等值列在前、范围列在后
+    KEY idx_status_update_time (status, update_time),
     -- 关键词搜索。注意：LIKE '%关键词%' 用不到该索引，这里只是为「前缀匹配」和将来接 ES 留位置
     KEY idx_title (title)
 ) ENGINE = InnoDB

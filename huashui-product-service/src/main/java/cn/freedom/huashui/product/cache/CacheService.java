@@ -11,9 +11,12 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.Duration;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * 缓存读写封装：一次性处理掉缓存穿透、击穿、雪崩三个问题。
@@ -239,7 +242,63 @@ public class CacheService {
         redisTemplate.opsForSet().add(key, value);
     }
 
-    /** 重新封装 TTL：加最多 1/3 的随机抖动，避免大批 key 同时过期造成缓存雪崩 */
+    /**
+     * 读取集合成员（最多 {@code limit} 个）。
+     *
+     * <p>用 {@code SMEMBERS} 全量取再截断，而不是 {@code SSCAN} 游标：
+     * 「待结算」集合的规模受「被访问过的商品数」限制，校园项目的量级下完全可控；
+     * 换成游标会让调用方多处理一遍遍历状态。若将来访问量级上来了，此处应改为 SSCAN。
+     */
+    public Set<String> members(String key, int limit) {
+        Set<String> all = redisTemplate.opsForSet().members(key);
+        if (all == null || all.isEmpty()) {
+            return Collections.emptySet();
+        }
+        if (all.size() <= limit) {
+            return all;
+        }
+        return all.stream().limit(limit).collect(Collectors.toSet());
+    }
+
+    /** 从集合中移除一个成员（结算完成后调用，避免同一个商品每轮都被重复处理） */
+    public void removeFromSet(String key, String value) {
+        redisTemplate.opsForSet().remove(key, value);
+    }
+
+    /**
+     * <b>原子地</b>把计数器取走并置零，返回取走前的值（Redis 的 {@code GETSET}）。
+     *
+     * <p>浏览量结算必须用它，不能用「先 get 再 set 0」：
+     * 两步之间到达的浏览会被后一步清零抹掉，而这属于**静默丢数据**。
+     * {@code GETSET} 是单条原子命令，取走之后的新增量会落在新的 0 上，一个都不会丢。
+     *
+     * @return 取走前的计数值；key 不存在时返回 0
+     */
+    public long getAndReset(String key) {
+        String previous = redisTemplate.opsForValue().getAndSet(key, "0");
+        if (previous == null || previous.isBlank()) {
+            return 0L;
+        }
+        try {
+            return Long.parseLong(previous);
+        } catch (NumberFormatException e) {
+            log.warn("浏览量计数器的值不是数字，按 0 处理 | key={} | value={}", key, previous);
+            return 0L;
+        }
+    }
+
+    /**
+     * 把计数器的值加上指定数量。
+     *
+     * <p>用于结算失败时把已取走的差值<b>还回去</b> —— 否则这批浏览量就永久丢失了。
+     * 不能写成「读出来再写回去」（并发下会覆盖别人的增量），Redis 的 {@code INCRBY} 是原子的。
+     */
+    public void incrementBy(String key, long delta) {
+        redisTemplate.opsForValue().increment(key, delta);
+    }
+
+    /**
+     * 重新封装 TTL：加最多 1/3 的随机抖动，避免大批 key 同时过期造成缓存雪崩 */
     private Duration withJitter(Duration base) {
         long extra = ThreadLocalRandom.current().nextLong(Math.max(base.toSeconds() / 3, 1L));
         return base.plusSeconds(extra);

@@ -46,4 +46,16 @@ public class OrderProperties {
 
     /** 补发任务的执行间隔（毫秒） */
     private long localMessageTaskIntervalMs = 30000L;
+
+    /**
+     * 「锁定超时」判定在支付超时之上额外加的缓冲分钟数。
+     *
+     * <p>为什么要有缓冲：正常的下单到付款之间，商品本来就处于「已锁定」，那是「进行中」
+     * 而不是「异常」。若把阈值卡在支付超时的同一时刻，正在交易的商品会被误判成异常并强行解锁，
+     * 出现「买家还在付款，商品已被放回在售、被别人买走」。
+     */
+    private int staleLockBufferMinutes = 5;
+
+    /** 单轮扫描最多处理多少个候选商品，避免一次拉太多把商品服务拖慢 */
+    private int staleLockBatchSize = 100;
 }

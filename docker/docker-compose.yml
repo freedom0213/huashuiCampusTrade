@@ -94,8 +94,48 @@ services:
       timeout: 5s
       retries: 10
 
+  # ---------------- XXL-JOB 调度中心：定时任务的可视化调度与手动触发 ----------------
+  #
+  # 【为什么容器内连的是 host.docker.internal】
+  # 本项目的 MySQL 刻意不容器化（复用本机 8.0.34），而调度中心跑在容器里，
+  # 因此要用 host.docker.internal 解析回宿主机。Docker Desktop 内置支持这个名字。
+  #
+  # 【为什么执行器地址也要配 host.docker.internal】
+  # 方向正好相反：调度中心触发任务时是「容器 → 宿主机上的执行器」。
+  # 所以两个业务服务里的 xxl.job.executor.address 也写成 host.docker.internal:<port>，
+  # 否则调度中心会拿着容器网络里解析不到的 IP 去回调，任务永远触发不成功。
+  #
+  # 【凭据说明】accessToken 与两个服务 application.yml 中的 xxl.job.access-token 必须一致；
+  # 调度中心默认账号 admin / 123456（首次登录后请自行修改）。
+  xxl-job-admin:
+    image: xuxueli/xxl-job-admin:2.4.1
+    container_name: huashui-xxl-job-admin
+    restart: unless-stopped
+    ports:
+      # 宿主机 18080 → 容器 8080。避开 8080 这个到处都是的端口
+      - "127.0.0.1:18080:8080"
+    environment:
+      # 官方镜像的启动脚本会把 PARAMS 原样追加到 java -jar 之后
+      PARAMS: >-
+        --spring.datasource.url=jdbc:mysql://host.docker.internal:3306/huashui_job?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+        --spring.datasource.username=huashui
+        --spring.datasource.password=huashui@123
+        --xxl.job.accessToken=huashui-job-token-2026
+    volumes:
+      - xxl-job-logs:/data/applogs
+    # 没有 depends_on：它依赖的 MySQL 是「本机安装、不容器化」的，不在本 compose 里。
+    # 万一调度中心比数据库先就绪导致启动失败，restart: unless-stopped 会自动重试
+    healthcheck:
+      # 镜像里没有 curl/wget/nc，只有 bash —— 所以用 bash 的 /dev/tcp 开一个连接来判断端口可用
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
 volumes:
   redis-data:
   rabbitmq-data:
   nacos-data:
   nacos-logs:
+  xxl-job-logs:

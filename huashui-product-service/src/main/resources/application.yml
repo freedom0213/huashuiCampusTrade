@@ -111,6 +111,28 @@ huashui:
     dead-letter-fetch-size: 50
     dead-letter-replay-limit: 10
 
+  # ========== 浏览量结算（阶段 10）==========
+  view-count:
+    # 单轮最多结算多少个商品：一次拉太多会长时间占用连接，
+    # 而未结算的增量不会丢（还在 Redis 里、id 也还在 dirty 集合中），下一轮继续
+    flush-batch-size: 200
+
+# ========== XXL-JOB 执行器 ==========
+xxl:
+  job:
+    admin:
+      addresses: http://127.0.0.1:18080/xxl-job-admin
+    access-token: huashui-job-token-2026
+    executor:
+      appname: huashui-product-service-executor
+      # ⚠️ 显式指定：调度中心在容器内，自动探测的 IP 容器到不了（详见 order-service 的 XxlJobConfig）
+      address: http://host.docker.internal:6006
+      ip: ""
+      port: 6006
+      logpath: ./logs/xxl-job/product
+      logretentiondays: 7
+
+
 knife4j:
   enable: true
   setting:

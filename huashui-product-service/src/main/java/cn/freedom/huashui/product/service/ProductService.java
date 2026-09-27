@@ -7,6 +7,8 @@ import cn.freedom.huashui.product.dto.ProductSaveDTO;
 import cn.freedom.huashui.product.vo.ProductDetailVO;
 import cn.freedom.huashui.product.vo.ProductListVO;
 
+import java.util.List;
+
 /**
  * 商品服务。
  *
@@ -81,4 +83,15 @@ public interface ProductService {
      * 标记商品已售出：已锁定 → 已售出（终态）。由买家确认付款时调用。
      */
     void markSold(Long productId);
+
+    /**
+     * 查询「已锁定且长时间未变动」的商品 id（阶段 10 的兜底扫描任务用）。
+     *
+     * <p>「商品被锁定了、但订单没建出来」时商品会永远停在「已锁定」，
+     * 没有任何机制会救它。这个方法提供候选名单，由 order 侧确认有无有效订单。
+     *
+     * @param beforeMinutes 锁定超过多少分钟算超时
+     * @param limit         最多返回多少条
+     */
+    List<Long> listStaleLockedIds(int beforeMinutes, int limit);
 }

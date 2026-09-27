@@ -2,9 +2,12 @@ package cn.freedom.huashui.common.api.product;
 
 import cn.freedom.huashui.common.result.Result;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.List;
 
 /**
  * 商品域内部接口客户端（Feign）。
@@ -68,4 +71,19 @@ public interface ProductClient {
      */
     @PostMapping("/{id}/sold")
     Result<Void> markSold(@PathVariable("id") Long productId);
+
+    /**
+     * 查询「已锁定且长时间未变动」的商品 id（兜底扫描任务用）。
+     *
+     * <p><b>为什么由 order 侧发起这个扫描：</b>
+     * 「商品被锁定」记录在商品库，「有没有有效订单」记录在订单库，
+     * 没有哪个服务能同时看到两侧；而已冻结的依赖方向是 {@code order → product}。
+     * 所以商品域只提供候选名单，订单域负责确认「确实没有有效订单」并发出解锁消息。
+     *
+     * @param beforeMinutes 锁定超过多少分钟算超时
+     * @param limit         最多返回多少条
+     */
+    @GetMapping("/stale-locked")
+    Result<List<Long>> listStaleLocked(@RequestParam("beforeMinutes") int beforeMinutes,
+                                       @RequestParam("limit") int limit);
 }

@@ -114,6 +114,7 @@ flowchart TB
 | RabbitMQ 管理台 | 15672 | 15673 | Docker Compose |
 | Nacos HTTP | 8848 | 18848 | Docker Compose |
 | Nacos gRPC | 9848 / 9849 | 19848 / 19849 | Docker Compose |
+| XXL-JOB 调度中心 | 8080 | 18080 | Docker Compose |
 
 > Nacos 客户端的 gRPC 端口按「主端口 + 1000 / +1001」推导，因此 `18848` 对应 `19848` / `19849`。
 
@@ -156,9 +157,22 @@ docker compose -f docker/docker-compose.yml ps
 |---|---|---|
 | Nacos 控制台 | http://127.0.0.1:18848/nacos | 本地未开启鉴权 |
 | RabbitMQ 管理台 | http://127.0.0.1:15673 | `huashui` / `huashui@123` |
+| XXL-JOB 调度中心 | http://127.0.0.1:18080/xxl-job-admin | `admin` / `123456`（首次登录后请改） |
 
 > 容器端口只绑定 `127.0.0.1`，局域网内其他设备无法访问。
 > `docker-compose.yml` 中的凭据是**本地开发专用**，生产环境应改为通过环境变量注入。
+
+**2.1 建调度中心的库（首次）**
+
+```bash
+mysql -uhuashui -p < docs/sql/04-xxl-job.sql       # 官方表结构（库名改为 huashui_job）
+mysql -uhuashui -p < docs/sql/05-xxl-job-init.sql  # 执行器组 + 4 个任务定义
+```
+
+> `huashui` 账号默认只授权了 3 个业务库，新增 `huashui_job` 时需要先用 root 授权一次：
+> `GRANT ALL PRIVILEGES ON huashui_job.* TO 'huashui'@'localhost'; FLUSH PRIVILEGES;`
+>
+> 任务定义做成脚本而不是在界面里点：别人克隆后导入即可用，且 cron / 阻塞策略这些配置可被 review。
 
 **3. 敏感配置**
 
@@ -178,6 +192,15 @@ done
 
 按顺序启动：`gateway` → `user-service` → `product-service` → `order-service`，在 Nacos 控制台确认注册成功。
 
+> **定时任务**：4 个计划任务（超时订单清理 / 锁定超时扫描 / 本地消息补发 / 浏览量结算）
+> 由 XXL-JOB 调度中心触发，执行器内嵌在 product 与 order 服务里（端口 6006 / 6005）。
+> 启动服务后，去调度中心「执行器管理」确认两个执行器已自动注册，任务即可按 cron 运行。
+>
+> ⚠️ **不想启动调度中心时**：把 `huashui.order.timeout-task-enabled` 与
+> `huashui.order.local-message-task-enabled` 改回 `true`，由本地 `@Scheduled` 顶上
+> （这两个开关就是为此预留的降级通道）。但要注意：**两个开关为 false 且调度中心没起时，
+> 超时订单不会有人清理**。
+
 ## 开发进度
 
 - [x] 总体设计 V1
@@ -190,7 +213,7 @@ done
 - [x] 阶段 7：order-service
 - [x] 阶段 8：收藏 + Redis 缓存体系
 - [x] 阶段 9：RabbitMQ 消息可靠性
-- [ ] 阶段 10：XXL-JOB
+- [x] 阶段 10：XXL-JOB 分布式任务调度
 - [ ] 阶段 11：Sentinel
 - [ ] 阶段 12：商品审核 + 管理端
 - [ ] 阶段 13：Docker 全量部署 + 文档

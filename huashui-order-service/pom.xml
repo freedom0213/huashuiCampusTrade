@@ -64,6 +64,16 @@
             <artifactId>spring-boot-starter-amqp</artifactId>
         </dependency>
 
+        <!--
+          分布式任务调度执行器。
+          只引 core：执行器是「嵌在业务服务里的一段 SDK」，不是独立应用；
+          调度中心（xxl-job-admin）是另一个容器，见 docker/docker-compose.yml。
+        -->
+        <dependency>
+            <groupId>com.xuxueli</groupId>
+            <artifactId>xxl-job-core</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-spring-boot3-starter</artifactId>

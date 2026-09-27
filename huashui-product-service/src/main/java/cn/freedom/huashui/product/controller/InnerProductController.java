@@ -6,11 +6,14 @@ import cn.freedom.huashui.product.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 商品域内部接口。
@@ -50,5 +53,25 @@ public class InnerProductController {
     public Result<Void> markSold(@PathVariable("id") Long id) {
         productService.markSold(id);
         return Result.success();
+    }
+
+    /**
+     * 查询「已锁定且长时间未变动」的商品 id，供 order 侧的兜底扫描任务使用。
+     *
+     * <p><b>为什么这个查询放在商品域、判断却放在订单域：</b>
+     * 「商品是不是已锁定」在商品库，「有没有有效订单」在订单库，
+     * 没有哪个服务能同时看到两侧。而已冻结的依赖方向是 {@code order → product}
+     * （反向禁止，避免循环依赖），所以商品域只提供「候选名单」，
+     * 由订单域去确认「这些候选里哪些确实没有有效订单」。
+     *
+     * @param beforeMinutes 锁定超过多少分钟算「超时」
+     * @param limit         最多返回多少条，避免一次拉太多把商品服务拖慢
+     */
+    @GetMapping("/stale-locked")
+    @Operation(summary = "查询锁定超时的商品 id",
+            description = "条件：status = 已锁定 且 update_time 早于「现在 - beforeMinutes」")
+    public Result<List<Long>> staleLocked(@RequestParam("beforeMinutes") int beforeMinutes,
+                                          @RequestParam(value = "limit", defaultValue = "100") int limit) {
+        return Result.success(productService.listStaleLockedIds(beforeMinutes, limit));
     }
 }

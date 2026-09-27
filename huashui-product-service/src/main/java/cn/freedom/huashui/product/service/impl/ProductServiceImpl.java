@@ -467,6 +467,23 @@ public class ProductServiceImpl implements ProductService {
         log.info("商品已售出 | productId={}", productId);
     }
 
+    @Override
+    public List<Long> listStaleLockedIds(int beforeMinutes, int limit) {
+        Page<Product> page = new Page<>(1, limit);
+        page.setSearchCount(false);   // 不需要总数，省一次 count 查询
+
+        LocalDateTime threshold = LocalDateTime.now().minusMinutes(beforeMinutes);
+        return productMapper.selectPage(page, new LambdaQueryWrapper<Product>()
+                        .select(Product::getId)
+                        .eq(Product::getStatus, ProductStatus.LOCKED.getCode())
+                        .lt(Product::getUpdateTime, threshold)
+                        // 先处理锁得最久的，异常堆积时优先解救
+                        .orderByAsc(Product::getUpdateTime))
+                .getRecords().stream()
+                .map(Product::getId)
+                .toList();
+    }
+
     // ==================== 私有方法 ====================
 
     private void applyFormFields(Product product, ProductSaveDTO dto) {
