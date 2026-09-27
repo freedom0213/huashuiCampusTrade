@@ -11,6 +11,15 @@ import axios from 'axios'
    5. ⚠️ 网关 allow-credentials=false，所以 withCredentials 必须为 false
       （token 走请求头，不依赖 Cookie）
    6. ⚠️ 所有 Long 已被后端序列化成字符串，前端一律按 string 处理，不要 parseInt
+   7. 🔴 **失败有两条通道，必须都处理**：
+      ① **业务码** —— HTTP 200 + `Result{code != 200}`，在成功回调里按 `body.code` 判；
+      ② **HTTP 状态码** —— 网关/框架直接拒绝，**根本没有 `Result` 包体**
+         （`401` 未登录 / `403` 无权限 / `404` 资源不存在 / `429` **限流** /
+         `5xx` 服务异常 / 无响应）。这类只能在错误回调里按 `status` 翻译。
+      ⚠️ 判「是否处于错误分支」不要只看 ①：只覆盖 ① 的话，
+      ② 类失败会**静默地拿到一个空原因**（`new Error('')`），
+      toast 只剩标题 —— 用户看不出该怎么办。
+      ⇒ 错误回调末尾**必须有一句兜底文案**，把"漏枚举某个状态码"从静默变成可容忍。
    ========================================================== */
 
 const TOKEN_KEY = 'huashui_token'
@@ -90,7 +99,8 @@ service.interceptors.response.use(
     /* 文案优先级：
        ① 响应体里的 message（后端 Result，或 vite 代理错误处理给出的结构化原因，
           如「后端服务未启动或不可达」——比笼统的「系统繁忙」有用得多）
-       ② 按 HTTP 状态码给默认文案 */
+       ② 按 HTTP 状态码给默认文案
+       ③ 🔴 兜底一句话（见函数末尾）——保证 `！` 永远有原因 */
     let message = ''
     if (body && typeof body === 'object' && body.message) message = body.message
 
@@ -103,6 +113,15 @@ service.interceptors.response.use(
       message = message || '请求的资源不存在'
     } else if (status === 405) {
       message = message || '请求方法不支持'
+    } else if (status === 429) {
+      /* 🔴 限流（阶段 11 Sentinel）：这是**跨端约定**，务必保留。
+         限流被拒时后端返回的是 **HTTP 429**，而**不是** `Result{code:429}` ——
+         也就是说它不走上面「成功回调里按 body.code 判断」那条路，只能在这一层翻译。
+         若这里不处理：429 既不满足 401/403/404/405，也不满足 `status >= 500`，
+         `message` 会保持空串 → toast 只剩「登录失败」而没有原因，
+         用户不知道该重试还是该放弃 —— 直接违反「`！` 必须写出失败原因」的口径。
+         ⚠️ 另：429 的文案要**可执行**（等几秒再试），不要写成「请求失败」这类无信息量的话。 */
+      message = message || '操作太频繁，请稍等几秒再试'
     } else if (status >= 500) {
       message = message || (status === 503 ? '服务暂不可用，请稍后重试' : '系统繁忙，请稍后重试')
     } else if (error.code === 'ECONNABORTED') {
@@ -111,6 +130,12 @@ service.interceptors.response.use(
       // 请求根本没发出去 / 没收到响应（断网、DNS 失败等）
       message = '无法连接服务器，请检查网络'
     }
+
+    /* 🔴 兜底：以上都没命中（400 / 409 / 418 … 任何没枚举过的状态码）时也必须给出一句话。
+       否则 `new Error('')` → toast 的 `！` 只有标题、没有原因，
+       而「带原因的失败提示」是我们对用户的承诺（见 docs/02-前端设计V1.md §3.5.1）。
+       加这一条不只是为了 429：它把「漏枚举某个状态码」这件事从**静默**变成**可容忍**。 */
+    if (!message) message = '请求失败，请稍后重试'
 
     const e = new Error(message)
     e.code = status
