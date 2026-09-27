@@ -6,12 +6,17 @@ import * as productApi from '@/api/product'
 import * as orderApi from '@/api/order'
 import * as favoriteApi from '@/api/favorite'
 import { toastOk } from '@/composables/useToast'
+import { useNotice, buildNotices, refreshNoticeFrom } from '@/composables/useNotice'
 import { PRODUCT_STATUS } from '@/constants/enums'
 
 /* 「我的」聚合页。
    角标口径：后端没有计数接口，用三个轻请求拿 total。
    商品用 size=50 一次拉全量在前端分状态计数（个人商品量级远小于 50，
-   同时省掉「在售 / 已售出 / 待审核 / 已驳回」四个请求，还顺手供通知红点使用）。 */
+   同时省掉「在售 / 已售出 / 待审核 / 已驳回」四个请求）。
+
+   通知红点：**不在这里自己算**，而是复用通知中心那份聚合口径
+   （`buildNotices` + `refreshNoticeFrom`）—— 本页本来就会拉一次商品列表，
+   再补一个订单列表即可，红点与通知中心永远一致。 */
 
 const router = useRouter()
 const store = useUserStore()
@@ -19,15 +24,14 @@ const store = useUserStore()
 const SCHOOL = '华北水利水电大学'
 
 const loading = ref(true)
-const productStats = ref({ onSale: 0, sold: 0, hasPending: false })
+const productStats = ref({ onSale: 0, sold: 0 })
 const favCount = ref(0)
-const hasWaitingPay = ref(false)
+
+const { hasNotice, checkNotice } = useNotice()
 
 const nickname = computed(() => store.profile?.nickname || store.profile?.username || '同学')
 const dept = computed(() => store.profile?.dept || '')
 const avatar = computed(() => store.profile?.avatar || '')
-
-const hasNotice = computed(() => productStats.value.hasPending || hasWaitingPay.value)
 
 const MENUS = [
   { key: 'products', label: '我的发布', to: '/user/products', icon: 'box' },
@@ -42,26 +46,30 @@ const MENU_SECOND = [
 
 onMounted(async () => {
   loading.value = true
-  // 三个请求互相独立，并行发；任一失败只影响对应角标，不让整页报错
-  const [products, favorites, waitingPay] = await Promise.allSettled([
+  // 三个请求互相独立，并行发；任一失败只影响对应那块，不让整页报错
+  const [products, favorites, orders] = await Promise.allSettled([
     productApi.listMyProducts({ page: 1, size: 50 }),
     favoriteApi.listMyFavorites({ page: 1, size: 1 }),
-    orderApi.listMyOrders({ role: 'buyer', status: 0, page: 1, size: 1 })
+    orderApi.listMyOrders({ role: 'all', page: 1, size: 50 })
   ])
 
+  const productList =
+    products.status === 'fulfilled' ? products.value.records || [] : []
   if (products.status === 'fulfilled') {
-    const list = products.value.records || []
     productStats.value = {
-      onSale: list.filter((p) => p.status === PRODUCT_STATUS.ON_SALE).length,
-      sold: list.filter((p) => p.status === PRODUCT_STATUS.SOLD).length,
-      // 待审核(0) / 已驳回(5) → 通知红点的来源之一
-      hasPending: list.some(
-        (p) => p.status === PRODUCT_STATUS.PENDING_AUDIT || p.status === PRODUCT_STATUS.REJECTED
-      )
+      onSale: productList.filter((p) => p.status === PRODUCT_STATUS.ON_SALE).length,
+      sold: productList.filter((p) => p.status === PRODUCT_STATUS.SOLD).length
     }
   }
   if (favorites.status === 'fulfilled') favCount.value = favorites.value.total || 0
-  if (waitingPay.status === 'fulfilled') hasWaitingPay.value = (waitingPay.value.total || 0) > 0
+
+  /* 红点：两份列表都拿到了就地聚合（零额外请求）；
+     任一失败才退回 checkNotice() 的轻量重算，避免把「网络失败」显示成「没有通知」 */
+  if (products.status === 'fulfilled' && orders.status === 'fulfilled') {
+    refreshNoticeFrom(buildNotices(productList, orders.value.records || []))
+  } else {
+    checkNotice(true)
+  }
 
   loading.value = false
 })

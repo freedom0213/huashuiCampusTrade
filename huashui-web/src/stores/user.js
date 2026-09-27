@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as userApi from '@/api/user'
 import { clearAuth, getStoredUser, getToken, setStoredUser, setToken } from '@/api/request'
+import { resetNotice } from '@/composables/useNotice'
 
 /* 当前登录用户。
    ⚠️ 没有 /api/user/logout 接口 —— 退出登录只清本地 token 与缓存。 */
@@ -55,6 +56,8 @@ export const useUserStore = defineStore('user', () => {
     token.value = ''
     profile.value = null
     clearAuth()
+    // 通知红点是模块级状态，不清掉下个账号会看到上一个账号的红点
+    resetNotice()
   }
 
   return { token, profile, isLogin, role, login, register, fetchProfile, updateLocal, logout }

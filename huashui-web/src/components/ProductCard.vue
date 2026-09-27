@@ -13,9 +13,7 @@ import { CONDITION_DESC } from '@/constants/enums'
 const props = defineProps({
   product: { type: Object, required: true },
   /** 仅用于入场动画的错落延迟 */
-  index: { type: Number, default: 0 },
-  /** 收藏页用：卡片右上角的心形/状态遮罩由父级插槽提供 */
-  showState: { type: Boolean, default: false }
+  index: { type: Number, default: 0 }
 })
 
 /* tap 事件把原生 event 一并抛出：块 3-B 的「卡片 ⇄ 详情」FLIP 转场需要父级

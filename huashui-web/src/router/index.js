@@ -141,18 +141,25 @@ const routes = [
   {
     path: '/user/favorites',
     name: 'favorites',
-    component: Placeholder,
-    meta: { title: '我的收藏', auth: true, block: 6, apis: ['GET /api/favorite/mine', 'DELETE /api/favorite/{id}'] }
+    // 块 6-A 已实现
+    component: () => import('@/views/FavoritesView.vue'),
+    meta: {
+      title: '我的收藏',
+      auth: true,
+      apis: ['GET /api/favorite/mine', 'DELETE /api/favorite/{productId}']
+    }
   },
   {
     path: '/notices',
     name: 'notices',
-    component: Placeholder,
+    // 块 6-B 已实现
+    component: () => import('@/views/NoticesView.vue'),
     meta: {
       title: '通知中心',
       auth: true,
-      block: 6,
-      apis: ['纯前端聚合：GET /api/product/mine + GET /api/order/mine（无专用接口）']
+      apis: [
+        '纯前端聚合：GET /api/product/mine + GET /api/order/mine?role=all（无专用接口）'
+      ]
     }
   },
   {
