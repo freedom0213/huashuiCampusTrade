@@ -117,6 +117,20 @@ img {
   }
 }
 
+/* ==========================================================
+   管理端桌面页（/admin/*，2026-09-28）：突破上面的移动端容器。
+   AdminLayout 根元素带 .admin-shell，用 :has 向上选择外壳 ——
+   纯 CSS 解除 max-width 限制并改用后台底色，无需 JS 操作 DOM。
+   移动端页面不含 .admin-shell，不受影响。
+   ========================================================== */
+.app-shell:has(.admin-shell) {
+  max-width: none;
+  height: auto;
+  min-height: 100dvh;
+  background: none;
+  overflow: visible;
+}
+
 /* 页面主体：占满剩余高度并独立滚动，保证顶栏/底栏固定 */
 .app-body {
   flex: 1;

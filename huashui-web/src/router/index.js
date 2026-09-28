@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { getToken } from '@/api/request'
+import { useUserStore } from '@/stores/user'
+import { toastError } from '@/composables/useToast'
 
 /* ==========================================================
    路由表 —— 与 docs/02-前端设计V1.md 的 14 个页面一一对应
@@ -196,6 +198,34 @@ const routes = [
     meta: { title: '注册', apis: ['POST /api/user/register'], guestOnly: true }
   },
   {
+    path: '/admin',
+    component: () => import('@/views/admin/AdminLayout.vue'),
+    /* 管理端（2026-09-28 用户拍板）：同一工程 /admin/* + 独立桌面布局，
+       只做最小闭环（审核列表 / 通过 / 驳回 / 强制下架）；
+       不做分类管理、用户禁用启用（与后端 13 号文档口径一致）。
+       权限：守卫 adminOnly 判 role===2（体验层拦截），后端 requireAdmin() 是真正防线。 */
+    meta: { adminOnly: true },
+    children: [
+      { path: '', redirect: { name: 'adminAudit' } },
+      {
+        path: 'audit',
+        name: 'adminAudit',
+        component: () => import('@/views/admin/AuditView.vue'),
+        meta: {
+          title: '商品审核',
+          adminOnly: true,
+          apis: [
+            'GET /api/product/admin/audit/list',
+            'PUT /api/product/admin/{id}/approve',
+            'PUT /api/product/admin/{id}/reject',
+            'PUT /api/product/admin/{id}/force-off',
+            'GET /api/product/admin/audit/stats（扩展，待后端）'
+          ]
+        }
+      }
+    ]
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'notFound',
     component: () => import('@/views/NotFoundView.vue'),
@@ -212,7 +242,10 @@ const router = createRouter({
 })
 
 /* 路由守卫：只做「有没有 token」这一层判定。
-   真正的权限（是不是本人、是不是买卖双方）由后端判定，前端不重复实现。 */
+   真正的权限（是不是本人、是不是买卖双方）由后端判定，前端不重复实现。
+   🔴 adminOnly 是唯一的例外：管理员身份（role===2）前端可判定
+   （user store 的 role 来自 LoginVO），拦截只是为了不让普通用户撞进后台页面；
+   接口层的真防线仍是后端 requireAdmin()。 */
 router.beforeEach((to) => {
   const logged = !!getToken()
 
@@ -221,6 +254,16 @@ router.beforeEach((to) => {
   }
   if (to.meta.guestOnly && logged) {
     return { path: '/' }
+  }
+  if (to.meta.adminOnly) {
+    if (!logged) {
+      return { path: '/login', query: { redirect: to.fullPath } }
+    }
+    const userStore = useUserStore()
+    if (userStore.role !== 2) {
+      toastError('无权访问', '该页面仅管理员可见')
+      return { path: '/' }
+    }
   }
   return true
 })
