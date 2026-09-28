@@ -5,6 +5,7 @@ import cn.freedom.huashui.common.result.PageResult;
 import cn.freedom.huashui.product.dto.ProductQueryDTO;
 import cn.freedom.huashui.product.dto.ProductSaveDTO;
 import cn.freedom.huashui.product.vo.ProductDetailVO;
+import cn.freedom.huashui.product.vo.AdminAuditStatsVO;
 import cn.freedom.huashui.product.vo.ProductListVO;
 
 import java.util.List;
@@ -60,9 +61,17 @@ public interface ProductService {
     // ==================== 管理端（阶段 13：商品审核） ====================
 
     /**
-     * 审核列表：按状态查商品（默认待审核，可查已驳回）。仅管理员可调用。
+     * 审核列表：按状态查商品。仅管理员可调用。
+     *
+     * <p>status 支持 0 / 1 / 4 / 5 单状态，或 "all"（四状态合计，不含交易在途态 2/3）；
+     * 不传默认待审核。keyword 可选，按商品标题模糊匹配。
      */
-    PageResult<ProductListVO> listForAudit(Integer status, Integer current, Integer size);
+    PageResult<ProductListVO> listForAudit(String status, Integer current, Integer size, String keyword);
+
+    /**
+     * 审核统计：待审核 / 在售 / 已驳回 / 已下架四个状态的商品数。仅管理员可调用。
+     */
+    AdminAuditStatsVO auditStats();
 
     /**
      * 审核通过：待审核 → 在售，并补记发布时间。仅管理员可调用。

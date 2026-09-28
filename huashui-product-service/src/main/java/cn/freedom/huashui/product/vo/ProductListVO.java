@@ -68,4 +68,12 @@ public class ProductListVO {
     private Integer favoriteCount;
 
     private LocalDateTime publishTime;
+
+    /**
+     * 提交时间（= 记录创建时间）。**仅管理端审核列表返回**，其余场景恒为 null。
+     * <p>publishTime 在审核通过时才补记，待审核 / 已驳回商品拿不到它，
+     * 管理端「提交时间」列需要的是管理员视角的「什么时候提交的」。
+     */
+    @Schema(description = "提交时间。仅管理端审核列表返回，其余场景为 null")
+    private LocalDateTime createdAt;
 }

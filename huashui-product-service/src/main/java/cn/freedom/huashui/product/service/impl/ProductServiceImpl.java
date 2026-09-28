@@ -22,9 +22,11 @@ import cn.freedom.huashui.product.mapper.FavoriteMapper;
 import cn.freedom.huashui.product.mapper.ProductImageMapper;
 import cn.freedom.huashui.product.mapper.ProductMapper;
 import cn.freedom.huashui.product.service.ProductService;
+import cn.freedom.huashui.product.vo.AdminAuditStatsVO;
 import cn.freedom.huashui.product.vo.ProductDetailVO;
 import cn.freedom.huashui.product.vo.ProductListVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -37,6 +39,7 @@ import org.springframework.util.StringUtils;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -470,28 +473,82 @@ public class ProductServiceImpl implements ProductService {
     // ==================== 管理端（阶段 13：商品审核） ====================
 
     @Override
-    public PageResult<ProductListVO> listForAudit(Integer status, Integer current, Integer size) {
+    public PageResult<ProductListVO> listForAudit(String status, Integer current, Integer size, String keyword) {
         UserContext.requireAdmin();
 
-        int statusCode = status == null ? ProductStatus.PENDING_AUDIT.getCode() : status;
-        if (ProductStatus.of(statusCode) == null) {
-            throw new BizException(ResultCode.PARAM_ERROR, "未知的商品状态");
+        // status：不传默认待审核（向后兼容）；"all" = 四个管理相关状态合计；
+        // 数字仅接受 0/1/4/5 —— 2(已锁定)/3(已售出) 属于交易在途/终态，管理列表不展示
+        List<Integer> statusFilter;
+        if (status == null || status.isBlank()) {
+            statusFilter = List.of(ProductStatus.PENDING_AUDIT.getCode());
+        } else if ("all".equalsIgnoreCase(status.trim())) {
+            statusFilter = List.of(ProductStatus.PENDING_AUDIT.getCode(), ProductStatus.ON_SALE.getCode(),
+                    ProductStatus.OFF_SHELF.getCode(), ProductStatus.REJECTED.getCode());
+        } else {
+            int code;
+            try {
+                code = Integer.parseInt(status.trim());
+            } catch (NumberFormatException e) {
+                throw new BizException(ResultCode.PARAM_ERROR, "未知的商品状态");
+            }
+            ProductStatus ps = ProductStatus.of(code);
+            if (ps == null || ps == ProductStatus.LOCKED || ps == ProductStatus.SOLD) {
+                throw new BizException(ResultCode.PARAM_ERROR, "未知的商品状态");
+            }
+            statusFilter = List.of(ps.getCode());
         }
-        // 管理列表不需要关键词 / 分类等筛选，直接用三个裸参数，不为它建 QueryDTO
+
+        boolean hasKeyword = keyword != null && !keyword.isBlank();
+
         long page = current == null || current < 1 ? 1 : current;
         long pageSize = size == null || size < 1 ? 10 : Math.min(size, 50);
 
         Page<Product> result = productMapper.selectPage(new Page<>(page, pageSize),
                 new LambdaQueryWrapper<Product>()
-                        .eq(Product::getStatus, statusCode)
+                        .in(Product::getStatus, statusFilter)
+                        // keyword 只匹配标题：卖家名在 user 库，联表/Feign 成本高于价值（前端兜底 #sellerId）
+                        .like(hasKeyword, Product::getTitle, keyword == null ? null : keyword.trim())
                         .orderByDesc(Product::getCreateTime)
                         .orderByDesc(Product::getId));
 
         List<ProductListVO> records = result.getRecords().stream()
                 // 驳回原因本来就是管理员写的，管理员列表无条件带回
-                .map(p -> ProductConverter.toListVO(p, true))
+                .map(p -> {
+                    ProductListVO vo = ProductConverter.toListVO(p, true);
+                    // 提交时间只有管理端视角需要（publishTime 是通过时才补记的）
+                    vo.setCreatedAt(p.getCreateTime());
+                    return vo;
+                })
                 .toList();
         return PageResult.of(result.getTotal(), result.getCurrent(), result.getSize(), records);
+    }
+
+    @Override
+    public AdminAuditStatsVO auditStats() {
+        UserContext.requireAdmin();
+
+        // 一条 GROUP BY 拿齐四个计数；MP 逻辑删除会自动附加 deleted = 0
+        List<Map<String, Object>> rows = productMapper.selectMaps(new QueryWrapper<Product>()
+                .select("status", "COUNT(*) AS cnt")
+                .in("status", List.of(ProductStatus.PENDING_AUDIT.getCode(), ProductStatus.ON_SALE.getCode(),
+                        ProductStatus.OFF_SHELF.getCode(), ProductStatus.REJECTED.getCode()))
+                .groupBy("status"));
+
+        AdminAuditStatsVO vo = new AdminAuditStatsVO();
+        for (Map<String, Object> row : rows) {
+            int code = ((Number) row.get("status")).intValue();
+            long cnt = ((Number) row.get("cnt")).longValue();
+            if (code == ProductStatus.PENDING_AUDIT.getCode()) {
+                vo.setPending((int) cnt);
+            } else if (code == ProductStatus.ON_SALE.getCode()) {
+                vo.setOnSale((int) cnt);
+            } else if (code == ProductStatus.OFF_SHELF.getCode()) {
+                vo.setOffShelf((int) cnt);
+            } else if (code == ProductStatus.REJECTED.getCode()) {
+                vo.setRejected((int) cnt);
+            }
+        }
+        return vo;
     }
 
     @Override

@@ -4,6 +4,7 @@ import cn.freedom.huashui.common.result.PageResult;
 import cn.freedom.huashui.common.result.Result;
 import cn.freedom.huashui.product.dto.AuditRejectDTO;
 import cn.freedom.huashui.product.service.ProductService;
+import cn.freedom.huashui.product.vo.AdminAuditStatsVO;
 import cn.freedom.huashui.product.vo.ProductListVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -38,12 +39,22 @@ public class AdminProductController {
     private final ProductService productService;
 
     @GetMapping("/audit/list")
-    @Operation(summary = "审核列表", description = "需要管理员。status 不传查待审核(0)，传 5 查已驳回")
+    @Operation(summary = "审核列表",
+            description = "需要管理员。status：不传默认待审核(0)，可传 1 在售 / 4 已下架 / 5 已驳回 / all 全部；"
+                    + "keyword 可选，按商品标题模糊匹配")
     public Result<PageResult<ProductListVO>> auditList(
-            @RequestParam(required = false) Integer status,
+            @RequestParam(required = false) String status,
             @RequestParam(required = false) Integer current,
-            @RequestParam(required = false) Integer size) {
-        return Result.success(productService.listForAudit(status, current, size));
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String keyword) {
+        return Result.success(productService.listForAudit(status, current, size, keyword));
+    }
+
+    @GetMapping("/audit/stats")
+    @Operation(summary = "审核统计", description = "需要管理员。待审核/在售/已驳回/已下架四个状态的商品数，"
+            + "供管理端统计卡与 Tab 计数")
+    public Result<AdminAuditStatsVO> auditStats() {
+        return Result.success(productService.auditStats());
     }
 
     @PutMapping("/{id}/approve")
