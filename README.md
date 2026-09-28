@@ -9,6 +9,37 @@
 
 ---
 
+## 界面预览
+
+**用户端** — Vue 3 + Vite，375 宽移动端优先设计，桌面自动居中限宽
+
+<p align="center">
+  <img src="docs/images/screenshots/01-home.jpg" width="176" alt="首页" />
+  <img src="docs/images/screenshots/03-product-detail.jpg" width="176" alt="商品详情" />
+  <img src="docs/images/screenshots/04-publish.jpg" width="176" alt="发布商品" />
+  <img src="docs/images/screenshots/06-order-detail.jpg" width="176" alt="订单详情" />
+</p>
+
+<p align="center">
+  <sub>首页推荐 · 商品详情（校内自提点 + 先联系后下单） · 发布商品 · 订单详情（30 分钟见面付款时间窗）</sub>
+</p>
+
+**管理端** — 与用户端同一个工程（`/admin/*` + 独立桌面布局），不是第二套前端
+
+<p align="center">
+  <img src="docs/images/screenshots/08-admin-audit.jpg" width="740" alt="管理端商品审核" />
+</p>
+
+<p align="center">
+  <sub>商品审核：统计卡 · 状态 Tab 带计数 · 标题搜索 · 通过 / 驳回 / 强制下架</sub>
+</p>
+
+更多页面见 [页面截图](#页面截图)。
+
+**视觉口径**：单一主色（玫瑰粉）+ 大留白，**价格是页面上唯一的强调色**；
+不堆分类图标墙、不做促销话术、不用 emoji——目标是「克制的校园工具感」，
+让信息层级自己说话。
+
 ## 项目简介
 
 校园二手的真实场景是：**同一个学生既是买家也是卖家** —— 今天卖掉旧教材，明天买一副二手耳机。因此本平台不区分买家/卖家角色，一个账号贯通发布与购买。
@@ -19,8 +50,8 @@
 
 | 端 | 功能 |
 |---|---|
-| 用户端（Vue 3 · H5） | 注册登录、浏览/搜索商品、商品详情、发布商品、收藏、下单、订单管理、上下架 |
-| 管理端（预留） | 商品审核、商品管理、用户管理、分类管理 |
+| 用户端（Vue 3 · H5） | 注册登录 · 浏览 / 搜索筛选（分类·校区·成色·排序）· 商品详情 · 发布商品（多图上传）· 收藏 · 下单 · 订单管理（倒计时 / 取消 / 确认收货）· 通知中心 · 卖家主页 |
+| 管理端（Vue 3 · PC 后台） | 商品审核列表（统计卡 · 状态 Tab · 标题搜索）· 审核通过 · 审核驳回（必填原因）· 强制下架 · 待审核数字徽章 |
 
 ## 技术栈
 
@@ -244,14 +275,14 @@ done
 - [x] 阶段 3：gateway
 - [x] 阶段 4：user-service
 - [x] 阶段 5：product-service
-- [ ] 阶段 6：前端最小闭环（前端由独立会话推进，后端直接进入阶段 7）
+- [x] 阶段 6：前端（Vue 3 + Vite，移动端优先；与后端并行推进）
 - [x] 阶段 7：order-service
 - [x] 阶段 8：收藏 + Redis 缓存体系
 - [x] 阶段 9：RabbitMQ 消息可靠性
 - [x] 阶段 10：XXL-JOB 分布式任务调度
 - [x] 阶段 11：Sentinel 限流 / 熔断降级
 - [x] 阶段 12：Nacos 配置中心
-- [x] 阶段 13：商品审核 + 管理端（纯后端 API）
+- [x] 阶段 13：商品审核 + 管理端（同一工程内的 H5 用户端 + PC 后台）
 - [ ] 阶段 14：Docker 全量部署 + 文档
 
 数据库建表与初始化脚本见 [`docs/sql/`](docs/sql/)，可直接执行
@@ -261,16 +292,74 @@ done
 
 发布 → 待审核 → 管理员审核 → 在售 的闭环已启用（`audit-required` 默认 true，
 Nacos 可热改；管理员强制下架在售商品后，卖家重新上架会再次进入待审核，无法绕过审核）。
-管理端刻意只做 **4 个纯后端接口**（待审列表 / 通过 / 驳回 / 强制下架，均在 `/api/product/admin/**`），
-服务层校验管理员角色（`role=2`），不做 Web 管理页面——管理是低频单人操作，
-不需要为它建立独立的前端与权限体系。管理员账号由 [`docs/sql/06-admin-user.sql`](docs/sql/06-admin-user.sql) 幂等插入
-（`admin01`，密码见脚本注释）。接口契约见 `docs/13-商品审核与管理端接口设计.md`。
+
+管理端**与用户端是同一个工程**（`/admin/*` 路由 + 独立桌面布局，不是第二套前端、也不是独立工程），
+只做最小闭环：审核列表（统计卡 / 状态 Tab / 标题搜索）· 通过 · 驳回（必填原因）· 强制下架 ·
+侧边栏待审核数字徽章；**不做**分类管理与用户禁用启用——管理是低频单人操作，
+不必为它建立额外的权限体系与页面。
+
+后端接口在 `/api/product/admin/**`，服务层 `UserContext.requireAdmin()` 校验管理员角色（`role=2`）；
+前端的路由守卫只是体验层拦截，**真正的防线在服务端**。管理员账号由
+[`docs/sql/06-admin-user.sql`](docs/sql/06-admin-user.sql) 幂等插入（`admin01`，密码见脚本注释）。
+
+## 页面截图
+
+**浏览与交易**
+
+<p align="center">
+  <img src="docs/images/screenshots/01-home.jpg" width="176" alt="首页" />
+  <img src="docs/images/screenshots/02-search.jpg" width="176" alt="搜索筛选" />
+  <img src="docs/images/screenshots/03-product-detail.jpg" width="176" alt="商品详情" />
+  <img src="docs/images/screenshots/10-seller.jpg" width="176" alt="卖家主页" />
+</p>
+
+<p align="center">
+  <sub>首页（热门推荐 / 最新发布） · 搜索筛选（分类·校区·成色·排序） · 商品详情 · 卖家主页</sub>
+</p>
+
+**发布与订单**
+
+<p align="center">
+  <img src="docs/images/screenshots/04-publish.jpg" width="176" alt="发布商品" />
+  <img src="docs/images/screenshots/05-my-products.jpg" width="176" alt="我的发布" />
+  <img src="docs/images/screenshots/09-my-orders.jpg" width="176" alt="我的订单" />
+  <img src="docs/images/screenshots/06-order-detail.jpg" width="176" alt="订单详情" />
+</p>
+
+<p align="center">
+  <sub>发布商品 · 我的发布（状态分组 / 驳回原因 / 重新提交） · 我的订单 · 订单详情</sub>
+</p>
+
+**通知中心**
+
+<p align="center">
+  <img src="docs/images/screenshots/07-notices.jpg" width="176" alt="通知中心" />
+</p>
+
+<p align="center">
+  <sub>聚合「我的发布 + 我的订单」的通知流：未读圆点、点开单条即已读、全部已读一键清除</sub>
+</p>
+
+**管理端**
+
+<p align="center">
+  <img src="docs/images/screenshots/08-admin-audit.jpg" width="740" alt="管理端商品审核" />
+</p>
+
+<p align="center">
+  <sub>桌面后台：统计卡 · 状态 Tab 带计数 · 标题搜索 · 逐条通过 / 驳回 / 强制下架</sub>
+</p>
 
 ## 关于本项目
 
-本项目为个人学习与实践项目，目标是完整走通 Spring Cloud 微服务的技术链路。
+本项目为个人学习与实践项目，目标是完整走通 Spring Cloud 微服务的技术链路：
+从服务拆分、服务治理（注册发现 / 配置中心 / 限流熔断）、数据一致性（本地消息表 + 幂等消费），
+到前端联调与容器化部署。
 
-开发过程中**使用 AI 工具辅助编码**；需求拆解、技术选型、业务口径定义与代码验收由本人完成。
+**开发方式**：由本人主导需求拆解、技术选型、业务口径定义与验收，**AI 结对完成实现**；
+每一处改动经本人 review 与实际联调回归（浏览器 + 真机、多账号角色）后才提交。
+本项目不使用脚手架式生成，所有业务口径（状态机、审核开关、交易方式、隐私字段的可见范围等）
+都在 `docs/` 的设计文档中先行确定，代码与文档偏离时以文档记录决策。
 
 ## License
 
