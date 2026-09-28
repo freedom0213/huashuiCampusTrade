@@ -1,7 +1,12 @@
 <script setup>
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, onUnmounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import {
+  startAdminPendingPolling,
+  stopAdminPendingPolling,
+  useAdminPending
+} from '@/composables/useAdminPending'
 
 /* ==========================================================
    管理端布局 /admin/*
@@ -13,7 +18,20 @@ import { useUserStore } from '@/stores/user'
    ========================================================== */
 
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
+
+/* 管理员会话在后台闭环：admin01 是纯后台账号，退出即回登录页，
+   不和移动端的浏览/交易场景混用（登录页对管理员也会自动跳回 /admin）。 */
+function doLogout() {
+  userStore.logout()
+  router.replace('/login')
+}
+
+/* 待审核徽章：进入管理端开始轮询，离开即停（失败静默，见 composable 注释） */
+const { pending } = useAdminPending()
+onMounted(() => startAdminPendingPolling(30000))
+onUnmounted(stopAdminPendingPolling)
 
 /* 导航：当前只有「商品审核」一项；后续加页面在这里追加即可 */
 const NAV_GROUPS = [
@@ -54,6 +72,10 @@ const nickname = computed(() => userStore.profile?.nickname || userStore.profile
               <rect x="11" y="11" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.5" />
             </svg>
             <span>{{ item.label }}</span>
+            <!-- 有待审核商品时点亮：用户发布后管理端能看到提醒 -->
+            <span v-if="item.name === 'adminAudit' && pending > 0" class="nav-badge">
+              {{ pending }}
+            </span>
           </RouterLink>
         </div>
       </nav>
@@ -64,6 +86,12 @@ const nickname = computed(() => userStore.profile?.nickname || userStore.profile
           <p class="footer-name">{{ nickname }}</p>
           <p class="footer-sub">管理员</p>
         </div>
+        <button class="footer-logout press" aria-label="退出登录" title="退出登录" @click="doLogout">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M12.5 3.5H15A1.5 1.5 0 0116.5 5v10a1.5 1.5 0 01-1.5 1.5h-2.5M8 6.5L4.5 10 8 13.5M4.5 10h7.5"
+                  stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
       </div>
     </aside>
 
@@ -156,6 +184,19 @@ const nickname = computed(() => userStore.profile?.nickname || userStore.profile
   width: 18px;
   height: 18px;
 }
+.nav-badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
 
 .side-footer {
   display: flex;
@@ -163,6 +204,29 @@ const nickname = computed(() => userStore.profile?.nickname || userStore.profile
   gap: 10px;
   padding: 12px 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.footer-text {
+  flex: 1;
+  min-width: 0;
+}
+.footer-logout {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.footer-logout svg {
+  width: 17px;
+  height: 17px;
+}
+.footer-logout:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
 }
 .footer-avatar {
   width: 34px;

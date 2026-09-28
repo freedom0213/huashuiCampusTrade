@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
-import { loadNotices, isUnread, markAllRead } from '@/composables/useNotice'
+import { loadNotices, isUnread, markAllRead, markRead } from '@/composables/useNotice'
 import { fromNow } from '@/utils/format'
 import { toastOk } from '@/composables/useToast'
 
@@ -67,6 +67,9 @@ function doMarkAll() {
 }
 
 function open(n) {
+  // 🔴 点开即已读：只标记这一条（不必再靠右上角「全部已读」）
+  markRead(n.key)
+  stamp.value += 1 // isUnread 读的是 localStorage，非响应式 —— 靠它强制重算
   if (n.to) router.push(n.to)
 }
 

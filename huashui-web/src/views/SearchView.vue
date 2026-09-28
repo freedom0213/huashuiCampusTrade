@@ -1,13 +1,14 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ProductCard from '@/components/ProductCard.vue'
 import PageState from '@/components/PageState.vue'
 import OptionSheet from '@/components/OptionSheet.vue'
 import { listCategories } from '@/api/category'
 import { useProductList } from '@/composables/useProductList'
+import { useListReturn } from '@/composables/useListReturn'
 import { CAMPUS_LIST, CONDITION_FILTER_OPTIONS, SORT_OPTIONS } from '@/constants/enums'
-import { captureCard, consumeReturn, restoreScroll } from '@/utils/flip'
+import { captureCard } from '@/utils/flip'
 
 /* 商品列表 / 搜索结果 —— 全站唯一的「筛选与排序」落点。
    首页的分类胶囊与「查看全部」都跳到这里，所以这套逻辑只需实现一次。
@@ -38,9 +39,10 @@ const list = useProductList(buildParams())
 
 const sheet = ref('')
 
-/* 滚动容器 + 「从详情页返回」的还原标记（见 utils/flip.js） */
+/* 滚动容器 + 「从详情页返回」的还原标记（见 utils/flip.js）
+   🔴 本页被 KeepAlive 缓存：首次加载在 onMounted，返回恢复在 onActivated */
 const scrollerEl = ref(null)
-const restoring = ref(false)
+const { restoring } = useListReturn(scrollerEl)
 
 const title = computed(() => {
   if (kw.value) return kw.value
@@ -81,15 +83,47 @@ function search() {
 }
 
 onMounted(async () => {
-  restoring.value = consumeReturn()
   await list.load(true)
-  await nextTick()
-  restoreScroll(scrollerEl.value)
   try {
     categories.value = (await listCategories()) || []
   } catch {
     categories.value = []
   }
+})
+
+/* 🔴 保活补偿：组件复用后 onMounted 不会再跑，而首页分类胶囊 /「查看全部」
+   都是从外部带着新 query 跳进来的 —— 必须响应 query 变化重新筛选，
+   否则永远显示上一次的结果。
+   内部筛选走 apply()（自己 replace 的 query），状态一致时这里直接跳过，不会重复请求。 */
+watch(() => route.fullPath, () => {
+  if (route.path !== '/search') return
+  const q = route.query
+  const next = {
+    kw: String(q.kw || ''),
+    sort: String(q.sort || 'newest'),
+    campus: q.campus ? String(q.campus) : null,
+    condition:
+      q.conditionLevel !== undefined && q.conditionLevel !== ''
+        ? Number(q.conditionLevel)
+        : null,
+    categoryId: q.categoryId ? String(q.categoryId) : null
+  }
+  if (
+    next.kw === kw.value &&
+    next.sort === sort.value &&
+    next.campus === campus.value &&
+    next.condition === condition.value &&
+    next.categoryId === categoryId.value
+  ) {
+    return
+  }
+  kw.value = next.kw
+  sort.value = next.sort
+  campus.value = next.campus
+  condition.value = next.condition
+  categoryId.value = next.categoryId
+  if (scrollerEl.value) scrollerEl.value.scrollTop = 0
+  list.setParams(buildParams())
 })
 
 function open(product, ev) {

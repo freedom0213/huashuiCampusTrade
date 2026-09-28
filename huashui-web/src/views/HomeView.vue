@@ -1,12 +1,13 @@
 <script setup>
-import { nextTick, onMounted, ref } from 'vue'
+import { onActivated, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import ProductCard from '@/components/ProductCard.vue'
 import PageState from '@/components/PageState.vue'
 import { listCategories } from '@/api/category'
 import { useProductList } from '@/composables/useProductList'
 import { useNotice } from '@/composables/useNotice'
-import { captureCard, consumeReturn, restoreScroll } from '@/utils/flip'
+import { useListReturn } from '@/composables/useListReturn'
+import { captureCard } from '@/utils/flip'
 
 /* 首页 = 推荐位，只有「热门推荐 + 最新发布」两个固定分区。
    分类胶囊与「查看全部」一律跳 /search，**不在首页原地切换**——
@@ -26,19 +27,20 @@ const hot = useProductList({ sort: 'views', size: 4 })
 const latest = useProductList({ sort: 'newest', size: 20 })
 
 /* 从详情页返回时：还原滚动位置 + 不重播卡片入场动画
-   （卡片本来就在屏幕上，再"入场"一次会和缩回动画撞在一起） */
+   （卡片本来就在屏幕上，再"入场"一次会和缩回动画撞在一起）
+   🔴 本页被 KeepAlive 缓存：首次加载在 onMounted（只跑一次），
+      返回恢复在 onActivated（useListReturn 内部）。 */
 const scrollerEl = ref(null)
-const restoring = ref(false)
+const { restoring } = useListReturn(scrollerEl)
 
-onMounted(async () => {
-  restoring.value = consumeReturn()
-  checkNotice()
+onMounted(() => {
   loadCategories()
   hot.load(true)
-  await latest.load(true)
-  await nextTick()
-  restoreScroll(scrollerEl.value)
+  latest.load(true)
 })
+
+/* 每次激活都重算通知红点（退出/切账号后回来不会残留上一个账号的红点） */
+onActivated(() => checkNotice())
 
 async function loadCategories() {
   try {

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ActionSheet from '@/components/ActionSheet.vue'
 import { getProductDetail } from '@/api/product'
@@ -10,7 +10,7 @@ import { PRODUCT_STATUS, PRODUCT_STATUS_DESC, PRODUCT_STATUS_STYLE, CONDITION_DE
 import { formatPrice, formatCount } from '@/utils/format'
 import { toastOk, toastError, toastFromError } from '@/composables/useToast'
 import { useUserStore } from '@/stores/user'
-import { getEnterFrom, markReturn, playEnter, playReturn } from '@/utils/flip'
+import { clearEnterFrom, getEnterFrom, isReturnPending, markLeftDetail, markReturn, playEnter, playReturn } from '@/utils/flip'
 
 /* ==========================================================
    商品详情 /product/:id —— 全站信息密度最高的页面，也是唯一的交易入口。
@@ -184,15 +184,38 @@ async function refreshQuietly() {
 }
 
 onMounted(async () => {
-  await fetchAll()
-  // 等 DOM 铺好再播放大动画：数据没渲染时大图还没有尺寸，FLIP 算不出 scale
-  await nextTick()
+  /* 🔴 播放时机：**不等数据**。
+     大图容器现在与加载骨架共用同一个 DOM（始终存在、尺寸由 CSS 的 1:1 决定），
+     所以可以立刻开播 —— 慢网络（手机 / 隧道）下等 fetchAll 完成再播的话，
+     用户看到的是「点了一下、等一两秒、直接出现详情页」，动画等于没有。 */
   const from = getEnterFrom(id.value)
   if (from && galleryEl.value) playEnter(galleryEl.value, from)
+
+  await fetchAll()
+})
+
+/* 🔴 卸载清场：只有「返回列表播缩回动画」这一条路径允许带走 enterFrom
+   （首页要在 restoreScroll 里用它的 scrollTop，消费完由列表页清除）。
+   其余任何离开方式（去卖家页 / 去下单 / 去登录）都必须清掉，
+   否则记录残留 → 下次同 id 的详情页（如从卖家页 / 消息中心进入）会误播放大动画。
+   这就是「FLIP 只属于 首页⇄详情 一条链」的范围收窄。
+
+   另：无条件打「刚离开详情页」标记 —— 列表页据此抑制卡片入场动画重播
+   （浏览器返回键路径拿不到 returnPending，只能靠它）。 */
+onBeforeUnmount(() => {
+  markLeftDetail()
+  if (!isReturnPending()) clearEnterFrom()
 })
 
 /* ── 返回：有转场现场就先缩回原卡片，再真正返回 ── */
+/* 🔴 重入锁：缩回动画要 420ms，其间用户（尤其手机连点 / touch 双触发）再点返回，
+   会第二次走到 router.back() → **一次退两层**，直接跳过首页落到更早的页面
+   （实测表现为「点返回却跳到了『我的』」）。 */
+let backing = false
 async function back() {
+  if (backing) return
+  backing = true
+
   const from = getEnterFrom(id.value)
   if (from && galleryEl.value && !loading.value) {
     markReturn()
@@ -342,9 +365,37 @@ function goSeller() {
     </div>
 
     <div class="page-scroll">
+      <!-- 🔴 大图区容器：加载骨架与真实大图**共用同一个 DOM 节点**（ref 始终有值），
+           这样「卡片放大成详情」的 FLIP 动画可以在数据到达前就开播 ——
+           此前容器写在 v-else 里，动画必须等 fetchAll 完成，慢网络（手机 / cpolar 隧道）
+           下要等 1~2 秒，用户只看到「直接跳转、没有动画」。 -->
+      <div v-if="!error" ref="galleryEl" class="gallery">
+        <div v-if="loading" class="sk-gallery" />
+        <template v-else>
+            <div v-if="images.length" class="rail" @scroll="onRailScroll">
+              <div v-for="(u, i) in images" :key="i" class="slide" :class="`t${(i % 4) + 1}`">
+                <img :src="u" :alt="title" @error="(e) => (e.target.style.display = 'none')" />
+              </div>
+            </div>
+            <!-- 无图：低饱和渐变 + 线性图标占位（与卡片占位同一套语言，不用 emoji） -->
+            <div v-else class="slide t2 empty">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
+                <rect x="3.2" y="4.6" width="17.6" height="14.8" rx="2.4" />
+                <circle cx="8.8" cy="9.8" r="1.6" />
+                <path d="M4.2 16.6l4.6-4.2 3.4 3 3-2.6 4.6 3.8" />
+              </svg>
+            </div>
+
+            <span v-if="badge" class="badge" :class="statusStyle">{{ badge }}</span>
+
+            <div v-if="images.length > 1" class="dots">
+              <i v-for="(u, i) in images" :key="i" :class="{ on: i === curIdx }" />
+            </div>
+        </template>
+      </div>
+
       <!-- ── 加载中：骨架形状与真实布局一致，避免加载完成时的位置跳变 ── -->
       <template v-if="loading">
-        <div class="sk-gallery" />
         <div class="detail">
           <div class="sk-line w46" />
           <div class="sk-line w86 tall" />
@@ -367,28 +418,6 @@ function goSeller() {
 
       <!-- ── 正常 ── -->
       <template v-else>
-        <div ref="galleryEl" class="gallery">
-          <div v-if="images.length" class="rail" @scroll="onRailScroll">
-            <div v-for="(u, i) in images" :key="i" class="slide" :class="`t${(i % 4) + 1}`">
-              <img :src="u" :alt="title" @error="(e) => (e.target.style.display = 'none')" />
-            </div>
-          </div>
-          <!-- 无图：低饱和渐变 + 线性图标占位（与卡片占位同一套语言，不用 emoji） -->
-          <div v-else class="slide t2 empty">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
-              <rect x="3.2" y="4.6" width="17.6" height="14.8" rx="2.4" />
-              <circle cx="8.8" cy="9.8" r="1.6" />
-              <path d="M4.2 16.6l4.6-4.2 3.4 3 3-2.6 4.6 3.8" />
-            </svg>
-          </div>
-
-          <span v-if="badge" class="badge" :class="statusStyle">{{ badge }}</span>
-
-          <div v-if="images.length > 1" class="dots">
-            <i v-for="(u, i) in images" :key="i" :class="{ on: i === curIdx }" />
-          </div>
-        </div>
-
         <div class="detail">
           <div class="prow-big fade" style="animation-delay: 0.11s">
             <span class="price-big"><small>¥</small>{{ price }}</span>
@@ -925,8 +954,9 @@ p.tip {
 
 /* ================= 三态 ================= */
 .sk-gallery {
+  /* 现在它是 .gallery 的子元素（父容器已定 1:1），撑满即可 */
   width: 100%;
-  aspect-ratio: 1 / 1;
+  height: 100%;
   background: linear-gradient(100deg, #f4f4f6 30%, #ececf0 50%, #f4f4f6 70%);
   background-size: 220% 100%;
   animation: shimmer 1.25s linear infinite;

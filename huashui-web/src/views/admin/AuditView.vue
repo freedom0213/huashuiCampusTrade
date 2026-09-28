@@ -9,6 +9,7 @@ import {
 } from '@/api/admin'
 import { formatPrice } from '@/utils/format'
 import { toastFromError, toastOk } from '@/composables/useToast'
+import { refreshAdminPending } from '@/composables/useAdminPending'
 import RejectDialog from './components/RejectDialog.vue'
 import ForceOffDialog from './components/ForceOffDialog.vue'
 
@@ -151,6 +152,8 @@ function goPage(p) {
 
 async function refresh() {
   await Promise.all([load({ reset: false }), loadStats()])
+  // 操作后同步侧边栏「待审核」徽章（不必等 30s 轮询）
+  refreshAdminPending()
 }
 
 /* —— 操作 —— */
@@ -298,13 +301,15 @@ onMounted(() => {
           :class="{ dim: p.status === 4 || p.status === 5 }"
         >
           <div class="cell-goods">
-            <img class="g-thumb" :src="p.cover" alt="" loading="lazy" />
+            <!-- 🔴 字段名必须是 coverUrl（后端 ProductListVO），不是 cover ——
+                 管理列表直接用后端 records 未做映射，写错不会报错、只表现为缩略图全部破图 -->
+            <img class="g-thumb" :src="p.coverUrl" alt="" loading="lazy" />
             <div class="g-info">
               <p class="g-title">{{ p.title }}</p>
               <p class="g-price">¥{{ formatPrice(p.price) }}</p>
             </div>
           </div>
-          <span class="cell-seller">{{ sellerName(p) }}</span>
+          <span class="cell-seller" :title="sellerName(p)">{{ sellerName(p) }}</span>
           <span class="cell-time">{{ submitTime(p) }}</span>
           <span class="cell-status">
             <span class="badge" :class="BADGE[p.status]?.cls || 'b-dead'">{{ BADGE[p.status]?.text || '未知' }}</span>
@@ -529,7 +534,7 @@ onMounted(() => {
 .thead,
 .trow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px 120px 100px 170px;
+  grid-template-columns: minmax(0, 1fr) 132px 118px 100px 170px;
   align-items: center;
   gap: 12px;
   padding: 0 20px;
@@ -603,6 +608,12 @@ onMounted(() => {
   font-size: 13px;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
+  /* 🔴 卖家列现在是 19 位雪花 id（sellerName 后端未就位），不加截断会溢出压到
+     相邻的「提交时间」列（实测两者数字重叠）。列宽固定时必须配 ellipsis，
+     完整 id 通过 title 提供（hover 可见）。 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .badge {
   display: inline-block;

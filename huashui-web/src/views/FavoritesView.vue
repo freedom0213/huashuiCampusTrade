@@ -7,7 +7,7 @@ import ActionSheet from '@/components/ActionSheet.vue'
 import { listMyFavorites, removeFavorite } from '@/api/favorite'
 import { PRODUCT_STATUS } from '@/constants/enums'
 import { toastOk, toastError, toastFromError } from '@/composables/useToast'
-import { captureCard, consumeReturn, restoreScroll } from '@/utils/flip'
+import { captureCard, clearEnterFrom, consumeLeftDetail, consumeReturn, restoreScroll } from '@/utils/flip'
 
 /* ==========================================================
    我的收藏 /user/favorites
@@ -91,10 +91,13 @@ function loadMore() {
 }
 
 onMounted(async () => {
-  restoring.value = consumeReturn()
+  // 抑制入场动画的判据 = 「刚从商品详情页返回」（含浏览器返回键，见 flip.js 注释）
+  restoring.value = consumeReturn() || consumeLeftDetail()
   await load(true)
   await nextTick()
   restoreScroll(scrollerEl.value)
+  // 消费完立刻清场：FLIP 记录只属于「本列表 → 详情 → 返回」一条链，防止残留误播
+  clearEnterFrom()
 })
 
 /* ── 单件取消收藏 ── */

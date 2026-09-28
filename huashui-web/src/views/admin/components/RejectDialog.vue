@@ -75,7 +75,8 @@ function onConfirm() {
         </div>
 
         <div v-if="product" class="dlg-product">
-          <img class="p-thumb" :src="product.cover" alt="" />
+          <!-- 字段名是 coverUrl（后端 ProductListVO），写成 cover 会静默破图 -->
+          <img class="p-thumb" :src="product.coverUrl" alt="" />
           <div class="p-info">
             <p class="p-title">{{ product.title }}</p>
             <p class="p-price">¥{{ formatPrice(product.price) }}</p>

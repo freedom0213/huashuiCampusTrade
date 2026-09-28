@@ -18,7 +18,16 @@ import { formatPrice } from '@/utils/format'
       用户点进去看不到对应内容。
       现改为 **「有未读通知」**：与列表共用同一份 `buildNotices`，语义也和设计稿一致
       （设计稿只在列表项上画未读小圆点），且让右上角「全部已读」真正生效。
-      未读用**时间水位线**判定（localStorage 存 lastReadAt），不需要额外的已读表。
+
+   🔴 已读机制（2026-09-28 改，**两级**）：
+      ① **单条已读**：点开某条通知 → 把它的 `key` 记进 localStorage 的已读集合
+         （`huashui_notice_read_ids`）。这样「点开一条、只有这一条变已读」成立。
+      ② **全部已读**：把**时间水位线**（`huashui_notice_read_at`）推到此刻 ——
+         一次覆盖当前所有条目，同时清空已读集合（已无用）。
+      判定：`时间晚于水位线 && 不在已读集合里` → 未读。
+      ⚠️ 为什么不能只用水位线（旧实现）：水位线是「全局单调阈值」，
+      点开任意一条都只能把水位线推到该条时间，会让比它早的所有通知一起变已读，
+      或者（若推到现在）等于全部已读 —— 无法表达「只读这一条」（实测用户报的正是这个）。
 
    ⚠️ 聚合视图的固有代价（设计已接受）：通知时间只能是业务字段时间
       （商品用 publishTime、订单用 createTime/finishTime），
@@ -26,6 +35,30 @@ import { formatPrice } from '@/utils/format'
    ========================================================== */
 
 const READ_AT_KEY = 'huashui_notice_read_at'
+const READ_IDS_KEY = 'huashui_notice_read_ids'
+
+/** 已读 key 集合的内存缓存（避免在 filter 里对每条反复 JSON.parse） */
+let readIdsCache = null
+
+function loadReadIds() {
+  if (readIdsCache) return readIdsCache
+  try {
+    readIdsCache = new Set(JSON.parse(localStorage.getItem(READ_IDS_KEY) || '[]'))
+  } catch {
+    readIdsCache = new Set()
+  }
+  return readIdsCache
+}
+
+function persistReadIds() {
+  let arr = Array.from(readIdsCache)
+  // 上限 300：通知 key 随商品/订单持续增长，只留最近的，防 localStorage 无限膨胀
+  if (arr.length > 300) {
+    readIdsCache = new Set(arr.slice(-300))
+    arr = Array.from(readIdsCache)
+  }
+  localStorage.setItem(READ_IDS_KEY, JSON.stringify(arr))
+}
 
 const hasNotice = ref(false)
 const checked = ref(false)
@@ -108,10 +141,28 @@ export function buildNotices(products = [], orders = []) {
   return list.sort((a, b) => ts(b.time) - ts(a.time))
 }
 
-/** 通知是否未读（时间晚于上次「全部已读」的水位线） */
+/** 通知是否未读：没被单独点开过，且晚于「全部已读」的水位线 */
 export function isUnread(n) {
   const t = ts(n.time)
-  return t > getReadAt()
+  // ⚠️ 时间字段解析失败（后端没给 / 格式异常）不能当成「已读」：
+  //    水位线比较在 t=0 时恒为假，会让这类通知永远点不亮红点（静默漏提醒）。
+  //    这时只按「是否被单独点开过」判定。
+  if (!t) return !loadReadIds().has(n.key)
+  return t > getReadAt() && !loadReadIds().has(n.key)
+}
+
+/**
+ * 单条已读：点开某条通知时调用。
+ * 只把它自己记进已读集合，**不动时间水位线** —— 这样「读一条」就只是那一条变已读。
+ */
+export function markRead(key) {
+  if (!key) return
+  const ids = loadReadIds()
+  if (ids.has(key)) return
+  ids.add(key)
+  persistReadIds()
+  // 红点（铃铛）要跟着变：让下一次 checkNotice 真正重算，而不是继续用缓存
+  checked.value = false
 }
 
 /** 拉两份列表 → 通知流。通知中心与红点共用这一份口径。 */
@@ -153,11 +204,14 @@ export async function checkNotice(force = false) {
   return hasNotice.value
 }
 
-/** 全部已读：把水位线推到此刻 —— 列表项小红点与顶部红点同时消失 */
+/** 全部已读：水位线推到此刻（一次覆盖所有现存条目），并清空单条已读集合 */
 export function markAllRead() {
   localStorage.setItem(READ_AT_KEY, String(Date.now()))
+  readIdsCache = new Set()
+  localStorage.removeItem(READ_IDS_KEY)
   hasNotice.value = false
   unreadCount.value = 0
+  checked.value = true
 }
 
 /** 退出登录时清掉，避免下个账号看到上一个账号的红点 */
@@ -165,6 +219,12 @@ export function resetNotice() {
   hasNotice.value = false
   unreadCount.value = 0
   checked.value = false
+  /* 🔴 水位线与已读集合都是**账号私有**的，必须一起清：
+     否则换账号登录后，时间早于上个账号水位线的通知会被误判成「已读」，
+     红点漏亮（不报错，只是少提醒）。 */
+  localStorage.removeItem(READ_AT_KEY)
+  localStorage.removeItem(READ_IDS_KEY)
+  readIdsCache = null
 }
 
 export function useNotice() {

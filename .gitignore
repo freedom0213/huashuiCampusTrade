@@ -36,6 +36,8 @@ application-local.yaml
 # ⚠️ docs/sql/** 必须保留 —— 它是可执行脚本，别人要跑项目就需要它。
 /docs/[0-9][0-9]-*.md
 /docs/design/
+# 前后端会话之间的接口契约/捎话清单（开发过程笔记，与 docs/NN-*.md 同类）
+管理端-后端接口扩展需求.md
 
 # ===== WorkBuddy 工作区数据（含内部笔记，不对外）=====
 .workbuddy/

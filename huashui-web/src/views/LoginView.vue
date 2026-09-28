@@ -30,8 +30,15 @@ async function submit() {
   try {
     await store.login({ username: username.value.trim(), password: password.value })
     toastOk('登录成功')
-    const redirect = String(route.query.redirect || '/')
-    router.replace(redirect)
+    /* 跳转规则：管理员身份**永远直进后台** —— admin01 是纯后台账号，
+       不存在「逛商城被拦截 → 登录回原页」的场景，redirect 对它无意义
+       （曾试过 redirect 优先，实测 /mine 回跳会把管理员带回移动端页面，已否）。
+       普通用户保持 redirect 优先：守卫拦截带来的回跳是用户本来的目的地。 */
+    if (store.role === 2) {
+      router.replace('/admin')
+    } else {
+      router.replace(String(route.query.redirect || '/'))
+    }
   } catch (e) {
     // 后端刻意把「用户不存在」与「密码错误」合成同一个 10004，防止枚举用户名
     toastFromError(e, '登录失败')

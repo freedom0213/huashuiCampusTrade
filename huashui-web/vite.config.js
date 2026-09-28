@@ -37,6 +37,18 @@ function onProxyError(target) {
 const API_TARGET = process.env.HUASHUI_API_TARGET || 'http://127.0.0.1:6001'
 const API_TARGET_LABEL = API_TARGET.replace(/^https?:\/\//, '')
 
+/* 🔴 内网穿透（cpolar / ngrok 等）访问时的 Host 校验白名单。
+   Vite 6 默认只接受 localhost 与 IP 的 Host 头，隧道域名会被拒并返回
+   403「Blocked request. This host is not allowed」——这是安全特性，**不要默认关掉**。
+   需要隧道时用环境变量临时放行（默认空 = 保持 Vite 原生安全默认）：
+     HUASHUI_TUNNEL_HOST='.cpolar.cn' npm run dev
+   支持逗号分隔多个；**以点开头 = 该域及其所有子域**（cpolar 免费版域名每次重启都会变，
+   写 '.cpolar.cn' 就不用跟着改）。 */
+const TUNNEL_HOSTS = (process.env.HUASHUI_TUNNEL_HOST || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -47,6 +59,8 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     port: 5173,
+    // 仅当显式给了 HUASHUI_TUNNEL_HOST 才追加放行项（localhost 与 IP 始终允许）
+    ...(TUNNEL_HOSTS.length ? { allowedHosts: TUNNEL_HOSTS } : {}),
     proxy: {
       '/api': {
         target: API_TARGET,

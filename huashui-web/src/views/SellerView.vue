@@ -6,7 +6,7 @@ import PageState from '@/components/PageState.vue'
 import { getUserBrief } from '@/api/user'
 import { getSoldCount } from '@/api/order'
 import { useProductList } from '@/composables/useProductList'
-import { captureCard, consumeReturn, restoreScroll } from '@/utils/flip'
+import { captureCard, clearEnterFrom, consumeLeftDetail, consumeReturn, restoreScroll } from '@/utils/flip'
 
 /* 卖家主页 —— 二手交易的信任建立在它上面：
    「已成交 N 笔」是核心信任信号，数据来自 order-service 的 sold-count（口径：已付款 + 交易完成，已取消不计）。
@@ -33,10 +33,13 @@ const dept = computed(() => seller.value?.dept || '')
 const avatar = computed(() => seller.value?.avatar || '')
 
 onMounted(async () => {
-  restoring.value = consumeReturn()
+  // 抑制入场动画的判据 = 「刚从商品详情页返回」（含浏览器返回键，见 flip.js 注释）
+  restoring.value = consumeReturn() || consumeLeftDetail()
   await list.load(true)
   await nextTick()
   restoreScroll(scrollerEl.value)
+  // 消费完立刻清场：FLIP 记录只属于「本列表 → 详情 → 返回」一条链，防止残留误播
+  clearEnterFrom()
   // 资料与成交数互不依赖，并行拿；任一失败只影响对应的那块信息，不让整页失败
   const [brief, sold] = await Promise.allSettled([
     getUserBrief(sellerId.value),

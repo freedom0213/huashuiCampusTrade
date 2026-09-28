@@ -88,6 +88,11 @@ export function consumeReturn() {
   return v
 }
 
+/** 详情页卸载时判断：是否正处于「返回列表播缩回动画」的流程中 */
+export function isReturnPending() {
+  return returnPending
+}
+
 /**
  * 播放「卡片 → 详情大图」的放大动画
  * @param {HTMLElement} el 详情页的大图容器
@@ -173,4 +178,23 @@ export function restoreScroll(scrollerEl) {
 export function clearEnterFrom() {
   enterFrom = null
   returnPending = false
+}
+
+/* 「刚刚离开商品详情页」标记：由详情页卸载时无条件设置，被列表页消费。
+   与 returnPending 的区别 —— 后者只有「点详情页返回按钮」才设置，
+   而用户完全可能用浏览器返回键 / 手势返回，那条路径拿不到 returnPending。
+   非缓存列表页（卖家主页 / 收藏）靠它判断「这次挂载是返回还是首次进入」，
+   是「返回就不该重播卡片入场动画」的唯一可靠线索。 */
+let leftDetail = false
+
+/** 详情页卸载时调用（无条件） */
+export function markLeftDetail() {
+  leftDetail = true
+}
+
+/** 列表页挂载时消费（用完即清） */
+export function consumeLeftDetail() {
+  const v = leftDetail
+  leftDetail = false
+  return v
 }

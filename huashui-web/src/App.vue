@@ -14,7 +14,13 @@ const showTabBar = computed(() => !!route.meta.tab)
   <div class="app-shell">
     <div class="app-body">
       <RouterView v-slot="{ Component }">
-        <component :is="Component" />
+        <!-- 只缓存两个「无路由参数」的列表页：从详情返回时数据原样复活、零请求，
+             是消掉「缩回动画结束后卡一下才出列表」的关键（见 composables/useListReturn.js）。
+             刻意不含 SellerView（:id 参数页，复用缓存会串卖家）与 FavoritesView（账号数据，
+             换账号登录有串数据风险）。 -->
+        <KeepAlive include="HomeView,SearchView">
+          <component :is="Component" />
+        </KeepAlive>
       </RouterView>
     </div>
 
